@@ -1,7 +1,7 @@
 import { createSupabaseServerClient } from "../../lib/supabase/server";
 
 export default async function TestPage() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   const { data, error } = await supabase.from("cursos").select("*").limit(20);
 

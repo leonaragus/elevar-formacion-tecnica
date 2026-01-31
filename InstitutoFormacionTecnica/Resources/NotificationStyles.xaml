@@ -1,0 +1,76 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Estilos de notificaciones -->
+    <Style x:Key="NotificationStyle" TargetType="Border">
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderLight}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="16"/>
+        <Setter Property="Margin" Value="0,0,0,12"/>
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.15"/>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Background" Value="{StaticResource BackgroundLight}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderLight}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <!-- Estilos de notificaciones por tipo -->
+    <Style x:Key="Notification.Success" TargetType="Border" BasedOn="{StaticResource NotificationStyle}">
+        <Setter Property="Background" Value="#f0fdf4"/>
+        <Setter Property="BorderBrush" Value="#bbf7d0"/>
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.15" Color="{StaticResource SuccessColor}"/>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#dcfce7"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    <Style x:Key="Notification.Error" TargetType="Border" BasedOn="{StaticResource NotificationStyle}">
+        <Setter Property="Background" Value="#fef2f2"/>
+        <Setter Property="BorderBrush" Value="#fecaca"/>
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.15" Color="{StaticResource DangerColor}"/>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#fee2e2"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    <Style x:Key="Notification.Warning" TargetType="Border" BasedOn="{StaticResource NotificationStyle}">
+        <Setter Property="Background" Value="#fffbeb"/>
+        <Setter Property="BorderBrush" Value="#fde68a"/>
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.15" Color="{StaticResource WarningColor}"/>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#fef3c7"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    <Style x:Key="Notification.Info" TargetType="Border" BasedOn="{StaticResource NotificationStyle}">
+        <Setter Property="Background" Value="#eff6ff"/>
+        <Setter Property="BorderBrush" Value="#bfdbfe"/>
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.15" Color="{StaticResource InfoColor}"/>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#dbeafe"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+</ResourceDictionary>

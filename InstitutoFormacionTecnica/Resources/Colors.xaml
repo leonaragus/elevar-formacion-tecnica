@@ -1,0 +1,19 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Iconos -->
+    <Image x:Key="logo" Source="pack://application:,,,/Resources/logo.png" Width="40" Height="40"/>
+    <Image x:Key="app-icon" Source="pack://application:,,,/Resources/app-icon.ico" Width="32" Height="32"/>
+    
+    <!-- Colores -->
+    <SolidColorBrush x:Key="PrimaryColor" Color="#2563eb"/>
+    <SolidColorBrush x:Key="SecondaryColor" Color="#10b981"/>
+    <SolidColorBrush x:Key="WarningColor" Color="#f59e0b"/>
+    <SolidColorBrush x:Key="DangerColor" Color="#ef4444"/>
+    <SolidColorBrush x:Key="InfoColor" Color="#3b82f6"/>
+    <SolidColorBrush x:Key="BackgroundLight" Color="#f1f5f9"/>
+    <SolidColorBrush x:Key="BackgroundDark" Color="#1e293b"/>
+    <SolidColorBrush x:Key="TextPrimary" Color="#1e293b"/>
+    <SolidColorBrush x:Key="TextSecondary" Color="#64748b"/>
+    <SolidColorBrush x:Key="BorderLight" Color="#e2e8f0"/>
+    <SolidColorBrush x:Key="BorderDark" Color="#334155"/>
+</ResourceDictionary>

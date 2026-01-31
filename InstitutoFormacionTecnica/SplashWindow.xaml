@@ -1,0 +1,61 @@
+<Window x:Class="InstitutoFormacionTecnica.SplashWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:InstitutoFormacionTecnica"
+        mc:Ignorable="d"
+        Title="Instituto de Formación Técnica" Height="300" Width="500"
+        WindowStyle="None" ResizeMode="NoResize" Background="White" 
+        WindowStartupLocation="CenterScreen" Topmost="True">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Logo y Título -->
+        <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <!-- Icono SVG simulado -->
+            <Viewbox Width="80" Height="80" Margin="0,0,0,20">
+                <Path Data="M12 2L1 21h22L12 2zm0 3.99L19.53 19H4.47L12 5.99zM11 16h2v2h-2zm0-6h2v4h-2z" 
+                      Fill="#2563eb" />
+            </Viewbox>
+            <TextBlock Text="Elevar Formación Técnica" 
+                       FontSize="24" FontWeight="Bold" 
+                       Foreground="#2563eb" 
+                       HorizontalAlignment="Center"
+                       Margin="0,0,0,10"/>
+            <TextBlock x:Name="StatusText" 
+                       Text="Iniciando aplicación..." 
+                       FontSize="14" 
+                       Foreground="#64748b" 
+                       HorizontalAlignment="Center"
+                       Margin="0,0,0,20"/>
+        </StackPanel>
+        
+        <!-- Barra de progreso -->
+        <Grid Grid.Row="1" Margin="50,0">
+            <ProgressBar x:Name="ProgressBar" 
+                        Height="4" 
+                        Background="#e2e8f0" 
+                        Foreground="#2563eb"
+                        IsIndeterminate="True"/>
+        </Grid>
+        
+        <!-- Información adicional -->
+        <StackPanel Grid.Row="2" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,20">
+            <TextBlock Text="Panel de Control Administrativo" 
+                       FontSize="12" 
+                       Foreground="#94a3b8" 
+                       HorizontalAlignment="Center"/>
+            <TextBlock x:Name="VersionText" 
+                       Text="Versión 1.0.0" 
+                       FontSize="12" 
+                       Foreground="#94a3b8" 
+                       HorizontalAlignment="Center"
+                       Margin="0,5,0,0"/>
+        </StackPanel>
+    </Grid>
+</Window>

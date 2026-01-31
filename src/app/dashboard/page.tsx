@@ -1,4 +1,4 @@
-import { createClient } from "../../lib/supabase";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { CreateCourseModal } from "./CreateCourseModal";
 
 type CursoRow = Record<string, unknown>;
@@ -19,7 +19,7 @@ function getCursoKey(curso: CursoRow, fallbackIndex: number) {
 }
 
 export default async function DashboardPage() {
-  const supabase = createClient();
+  const supabase = await createSupabaseServerClient();
 
   const { data, error } = await supabase
     .from("cursos")
@@ -119,4 +119,3 @@ export default async function DashboardPage() {
     </div>
   );
 }
-

@@ -1,0 +1,14 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Animaciones simples -->
+    <Storyboard x:Key="CardEnterAnimation">
+        <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" From="1" To="1.02" Duration="0:0:0.3"/>
+        <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" From="1" To="1.02" Duration="0:0:0.3"/>
+        <DoubleAnimation Storyboard.TargetProperty="RenderTransform.TranslateY" From="0" To="-5" Duration="0:0:0.3"/>
+    </Storyboard>
+    <Storyboard x:Key="CardLeaveAnimation">
+        <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" From="1.02" To="1" Duration="0:0:0.3"/>
+        <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" From="1.02" To="1" Duration="0:0:0.3"/>
+        <DoubleAnimation Storyboard.TargetProperty="RenderTransform.TranslateY" From="-5" To="0" Duration="0:0:0.3"/>
+    </Storyboard>
+</ResourceDictionary>

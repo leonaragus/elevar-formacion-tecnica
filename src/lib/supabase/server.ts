@@ -18,8 +18,8 @@ function getSupabaseEnv() {
  * `set/remove` están envueltos en `try/catch` (la escritura real se cubre con
  * `src/middleware.ts`).
  */
-export function createSupabaseServerClient() {
-  const cookieStore = cookies();
+export async function createSupabaseServerClient() {
+  const cookieStore = await cookies();
   const { url, anonKey } = getSupabaseEnv();
 
   return createServerClient(url, anonKey, {

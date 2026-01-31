@@ -1,0 +1,127 @@
+<Window x:Class="InstitutoFormacionTecnica.NewStudentWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:InstitutoFormacionTecnica"
+        mc:Ignorable="d"
+        Title="Nuevo Estudiante" Height="550" Width="650"
+        ResizeMode="NoResize">
+    <Window.Resources>
+        <ResourceDictionary Source="Resources/Styles.xaml"/>
+        <ResourceDictionary Source="Resources/ThemeColors.xaml"/>
+    </Window.Resources>
+    
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="Nuevo Estudiante" FontSize="24" FontWeight="Bold" Foreground="{StaticResource PrimaryColor}"/>
+            <TextBlock Text="Complete los datos del nuevo estudiante" FontSize="14" Foreground="{StaticResource TextSecondary}" Margin="0,5,0,0"/>
+        </StackPanel>
+        
+        <!-- Formulario -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <!-- Datos Personales -->
+                <StackPanel Margin="0,0,0,25">
+                    <TextBlock Text="Datos Personales" FontSize="18" FontWeight="Bold" Foreground="{StaticResource PrimaryColor}" Margin="0,0,0,15"/>
+                    
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                        <StackPanel Margin="0,0,20,0" Width="250">
+                            <TextBlock Text="Nombre" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                            <TextBox x:Name="FirstNameTextBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1"/>
+                        </StackPanel>
+                        
+                        <StackPanel Width="250">
+                            <TextBlock Text="Apellido" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                            <TextBox x:Name="LastNameTextBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1"/>
+                        </StackPanel>
+                    </StackPanel>
+                    
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                        <StackPanel Margin="0,0,20,0" Width="250">
+                            <TextBlock Text="DNI" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                            <TextBox x:Name="DniTextBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1" InputScope="Number"/>
+                        </StackPanel>
+                        
+                        <StackPanel Width="250">
+                            <TextBlock Text="Fecha de Nacimiento" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                            <DatePicker x:Name="BirthDatePicker" Height="40" FontSize="14" BorderBrush="{StaticResource BorderLight}" BorderThickness="1"/>
+                        </StackPanel>
+                    </StackPanel>
+                    
+                    <StackPanel Margin="0,0,0,20">
+                        <TextBlock Text="Género" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                        <ComboBox x:Name="GenderComboBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1">
+                            <ComboBoxItem Content="Masculino"/>
+                            <ComboBoxItem Content="Femenino"/>
+                            <ComboBoxItem Content="Otro"/>
+                        </ComboBox>
+                    </StackPanel>
+                </StackPanel>
+                
+                <!-- Datos de Contacto -->
+                <StackPanel Margin="0,0,0,25">
+                    <TextBlock Text="Datos de Contacto" FontSize="18" FontWeight="Bold" Foreground="{StaticResource PrimaryColor}" Margin="0,0,0,15"/>
+                    
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                        <StackPanel Margin="0,0,20,0" Width="250">
+                            <TextBlock Text="Email" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                            <TextBox x:Name="EmailTextBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1" InputScope="EmailName"/>
+                        </StackPanel>
+                        
+                        <StackPanel Width="250">
+                            <TextBlock Text="Teléfono" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                            <TextBox x:Name="PhoneTextBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1" InputScope="TelephoneNumber"/>
+                        </StackPanel>
+                    </StackPanel>
+                    
+                    <StackPanel Margin="0,0,0,20">
+                        <TextBlock Text="Dirección" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                        <TextBox x:Name="AddressTextBox" Height="60" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </StackPanel>
+                
+                <!-- Datos Académicos -->
+                <StackPanel Margin="0,0,0,25">
+                    <TextBlock Text="Datos Académicos" FontSize="18" FontWeight="Bold" Foreground="{StaticResource PrimaryColor}" Margin="0,0,0,15"/>
+                    
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                        <StackPanel Margin="0,0,20,0" Width="250">
+                            <TextBlock Text="Nivel Educativo" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                            <ComboBox x:Name="EducationLevelComboBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1">
+                                <ComboBoxItem Content="Primario Completo"/>
+                                <ComboBoxItem Content="Secundario Completo"/>
+                                <ComboBoxItem Content="Terciario Completo"/>
+                                <ComboBoxItem Content="Universitario Completo"/>
+                                <ComboBoxItem Content="Otro"/>
+                            </ComboBox>
+                        </StackPanel>
+                        
+                        <StackPanel Width="250">
+                            <TextBlock Text="Profesión" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                            <TextBox x:Name="ProfessionTextBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1"/>
+                        </StackPanel>
+                    </StackPanel>
+                    
+                    <StackPanel Margin="0,0,0,20">
+                        <TextBlock Text="Observaciones" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                        <TextBox x:Name="ObservationsTextBox" Height="80" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+        
+        <!-- Botones -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Button x:Name="CancelStudentButton" Content="Cancelar" Style="{StaticResource ButtonSecondary}" Width="100" Margin="0,0,10,0" Click="CancelStudentButton_Click"/>
+            <Button x:Name="SaveStudentButton" Content="Crear Estudiante" Style="{StaticResource ButtonPrimary}" Width="140" Click="SaveStudentButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

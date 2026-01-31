@@ -1,0 +1,112 @@
+<Window x:Class="InstitutoFormacionTecnica.NewCourseWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:InstitutoFormacionTecnica"
+        mc:Ignorable="d"
+        Title="Nuevo Curso" Height="500" Width="600"
+        ResizeMode="NoResize">
+    <Window.Resources>
+        <ResourceDictionary Source="Resources/Styles.xaml"/>
+        <ResourceDictionary Source="Resources/ThemeColors.xaml"/>
+    </Window.Resources>
+    
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="Nuevo Curso" FontSize="24" FontWeight="Bold" Foreground="{StaticResource PrimaryColor}"/>
+            <TextBlock Text="Complete los campos para crear un nuevo curso" FontSize="14" Foreground="{StaticResource TextSecondary}" Margin="0,5,0,0"/>
+        </StackPanel>
+        
+        <!-- Formulario -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <!-- Nombre del Curso -->
+                <StackPanel Margin="0,0,0,20">
+                    <TextBlock Text="Nombre del Curso" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                    <TextBox x:Name="CourseNameTextBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1"/>
+                </StackPanel>
+                
+                <!-- Descripción -->
+                <StackPanel Margin="0,0,0,20">
+                    <TextBlock Text="Descripción" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                    <TextBox x:Name="DescriptionTextBox" Height="80" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1" TextWrapping="Wrap"/>
+                </StackPanel>
+                
+                <!-- Categoría -->
+                <StackPanel Margin="0,0,0,20">
+                    <TextBlock Text="Categoría" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                    <ComboBox x:Name="CategoryComboBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1">
+                        <ComboBoxItem Content="Programación"/>
+                        <ComboBoxItem Content="Diseño"/>
+                        <ComboBoxItem Content="Negocios"/>
+                        <ComboBoxItem Content="Marketing"/>
+                        <ComboBoxItem Content="Idiomas"/>
+                    </ComboBox>
+                </StackPanel>
+                
+                <!-- Duración -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                    <StackPanel Margin="0,0,20,0">
+                        <TextBlock Text="Duración (horas)" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                        <TextBox x:Name="DurationTextBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1" InputScope="Number"/>
+                    </StackPanel>
+                    
+                    <StackPanel>
+                        <TextBlock Text="Modalidad" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                        <ComboBox x:Name="ModalityComboBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1">
+                            <ComboBoxItem Content="Presencial"/>
+                            <ComboBoxItem Content="Online"/>
+                            <ComboBoxItem Content="Semi-presencial"/>
+                        </ComboBox>
+                    </StackPanel>
+                </StackPanel>
+                
+                <!-- Precio -->
+                <StackPanel Margin="0,0,0,20">
+                    <TextBlock Text="Precio (ARS)" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                    <TextBox x:Name="PriceTextBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1" InputScope="Number"/>
+                </StackPanel>
+                
+                <!-- Fechas -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                    <StackPanel Margin="0,0,20,0">
+                        <TextBlock Text="Fecha Inicio" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                        <DatePicker x:Name="StartDatePicker" Height="40" FontSize="14" BorderBrush="{StaticResource BorderLight}" BorderThickness="1"/>
+                    </StackPanel>
+                    
+                    <StackPanel>
+                        <TextBlock Text="Fecha Fin" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                        <DatePicker x:Name="EndDatePicker" Height="40" FontSize="14" BorderBrush="{StaticResource BorderLight}" BorderThickness="1"/>
+                    </StackPanel>
+                </StackPanel>
+                
+                <!-- Capacidad -->
+                <StackPanel Orientation="Horizontal">
+                    <StackPanel Margin="0,0,20,0">
+                        <TextBlock Text="Cupo Máximo" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                        <TextBox x:Name="MaxCapacityTextBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1" InputScope="Number"/>
+                    </StackPanel>
+                    
+                    <StackPanel>
+                        <TextBlock Text="Cupo Mínimo" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                        <TextBox x:Name="MinCapacityTextBox" Height="40" FontSize="14" Padding="12,8" BorderBrush="{StaticResource BorderLight}" BorderThickness="1" InputScope="Number"/>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+        
+        <!-- Botones -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Button x:Name="CancelButton" Content="Cancelar" Style="{StaticResource ButtonSecondary}" Width="100" Margin="0,0,10,0" Click="CancelButton_Click"/>
+            <Button x:Name="SaveButton" Content="Crear Curso" Style="{StaticResource ButtonPrimary}" Width="120" Click="SaveButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
