@@ -49,6 +49,7 @@ export default async function AdminDashboardPage() {
 
   // Fetch pendientes
   let pendientes: any[] = [];
+  let dbError: string | null = null;
   try {
       const { data, error } = await client
         .from("cursos_alumnos")
@@ -59,6 +60,8 @@ export default async function AdminDashboardPage() {
       let combined: any[] = [];
       if (!error && data) {
         combined = [...data];
+      } else if (error) {
+        dbError = error.message;
       }
 
       // Intereses
@@ -66,6 +69,10 @@ export default async function AdminDashboardPage() {
           .from("intereses")
           .select("*")
           .limit(50);
+      
+      if (errorIntereses) {
+        dbError = (dbError ? dbError + " | " : "") + "Intereses: " + errorIntereses.message;
+      }
         
       if (!errorIntereses && intereses) {
           const interesesMapeados = intereses.map((i: any) => ({
@@ -83,14 +90,19 @@ export default async function AdminDashboardPage() {
       const unique = combined.filter((v, i, a) => a.findIndex(t => t.user_id === v.user_id && t.curso_id === v.curso_id) === i);
       pendientes = unique;
 
+      // Only use devstore if strictly needed AND if we are not in production (or user explicitly wants demo data)
+      // For now, disabling devstore fallback to avoid "ghost" student issue.
+      /*
       if (pendientes.length === 0 && (!data && !intereses)) {
          // Fallback to devstore if DB failed completely
          const pend = devInscripciones.filter((i) => i.estado === "pendiente");
          pendientes = pend;
       }
-  } catch (e) {
+      */
+  } catch (e: any) {
       console.error("Dashboard fetch error:", e);
-      pendientes = devInscripciones.filter((i) => i.estado === "pendiente");
+      dbError = e?.message || "Error desconocido";
+      // pendientes = devInscripciones.filter((i) => i.estado === "pendiente"); // Disable fallback
   }
 
   // Actividades & Recientes (mock)
@@ -117,6 +129,22 @@ export default async function AdminDashboardPage() {
               {user?.email || "Administrador"}
             </div>
           </header>
+
+          {dbError && (
+            <div className="mb-6 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 text-red-300" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-red-200">
+                    Error de conexión a la base de datos
+                  </div>
+                  <div className="mt-0.5 text-xs text-red-100/80">
+                    {dbError}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {pendientes.length > 0 ? (
             <div className="mb-6 rounded-2xl border border-yellow-400/20 bg-yellow-500/10 px-4 py-3">

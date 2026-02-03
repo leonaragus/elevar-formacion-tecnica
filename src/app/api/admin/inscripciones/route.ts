@@ -89,10 +89,11 @@ export async function GET(req: NextRequest) {
         // ... (código existente de fallback) ...
       }
       
-      const pend = devInscripciones.filter((i) => i.estado === "pendiente");
       // Deduplicate by user_id + curso_id
-      const all = [...combined, ...pend];
-      const unique = all.filter((v, i, a) => a.findIndex(t => t.user_id === v.user_id && t.curso_id === v.curso_id) === i);
+      // Don't merge devInscripciones if we have real data connection
+      // const pend = devInscripciones.filter((i) => i.estado === "pendiente");
+      // const all = [...combined, ...pend];
+      const unique = combined.filter((v, i, a) => a.findIndex(t => t.user_id === v.user_id && t.curso_id === v.curso_id) === i);
       
       return NextResponse.json({ ok: true, pendientes: unique, debug: debugInfo });
     } else {
