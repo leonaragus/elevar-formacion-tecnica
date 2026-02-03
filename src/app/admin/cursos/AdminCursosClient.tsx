@@ -2,6 +2,7 @@
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useState, useEffect } from "react";
 import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, Settings, LogOut, Search, Filter, Download, Trash2, Plus, Edit, Eye, CheckCircle, Clock, XCircle, Upload } from "lucide-react";
+import Link from "next/link";
  
  type CursoRow = {
    id: string;
@@ -137,14 +138,9 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
    const [newPrecio, setNewPrecio] = useState<number>(0);
    const [newEstado, setNewEstado] = useState<"activo" | "inactivo" | "en_desarrollo" | "suspendido">("en_desarrollo");
    const [saving, setSaving] = useState(false);
- 
-  const [showUploadCourseId, setShowUploadCourseId] = useState<string | null>(null);
-  const [uploadTitle, setUploadTitle] = useState("");
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-   const saveNewCourse = async () => {
+  const saveNewCourse = async () => {
      try {
        setSaving(true);
        const method = editingId ? "PUT" : "POST";
@@ -217,31 +213,6 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
           alert("Error de red");
       }
    };
- 
-  const uploadMaterial = async () => {
-    try {
-      if (!showUploadCourseId || !uploadFile) return;
-      setUploading(true);
-      const fd = new FormData();
-      fd.append("curso_id", showUploadCourseId);
-      if (uploadTitle) fd.append("titulo", uploadTitle);
-      fd.append("file", uploadFile);
-      const res = await fetch("/api/admin/materiales", { method: "POST", body: fd });
-      const json = await res.json().catch(() => null as any);
-      if (!res.ok || !json?.ok) {
-        alert(json?.error || "No se pudo subir el material");
-        return;
-      }
-      setShowUploadCourseId(null);
-      setUploadTitle("");
-      setUploadFile(null);
-      alert("Material subido");
-    } catch (e) {
-      alert("Error al subir material");
-    } finally {
-      setUploading(false);
-    }
-  };
 
    const approvePending = async (user_id: string, curso_id: string) => {
      try {
@@ -459,8 +430,6 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
                    </button>
                  </div>
                </div>
-             )}
- 
              <table className="w-full">
                <thead className="text-left">
                  <tr>
@@ -517,35 +486,36 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
                        </td>
                        <td className="px-4 py-3">
                          <div className="flex items-center gap-1">
-                           <button
-                             onClick={() => {
-                               console.log("Ver detalles de:", curso.id);
-                             }}
-                             className="text-blue-400 hover:text-blue-300 text-sm">
+                           <Link
+                             href={`/admin/cursos/${curso.id}`}
+                             className="text-blue-400 hover:text-blue-300 text-sm p-1"
+                             title="Ver detalles y gestionar"
+                           >
                                <Eye className="w-4 h-4" />
-                             </button>
+                           </Link>
                            <button
                             onClick={() => startEdit(curso)}
-                            className="text-green-400 hover:text-green-300 text-sm">
+                            className="text-green-400 hover:text-green-300 text-sm p-1"
+                            title="Editar información"
+                           >
                               <Edit className="w-4 h-4" />
                             </button>
-                          <button
-                            onClick={() => setShowUploadCourseId(curso.id)}
-                            className="text-purple-400 hover:text-purple-300 text-sm">
-                              <Upload className="w-4 h-4" />
-                          </button>
                           <button
                             onClick={() => {
                               if (confirm("¿Está seguro que desea cambiar el estado de este curso?")) {
                                 console.log("Cambiar estado:", curso.id);
                               }
                             }}
-                            className="text-yellow-400 hover:text-yellow-300 text-sm">
+                            className="text-yellow-400 hover:text-yellow-300 text-sm p-1"
+                            title="Cambiar estado"
+                          >
                               <Clock className="w-4 h-4" />
                             </button>
                           <button
                             onClick={() => deleteCourse(curso.id)}
-                            className="text-red-400 hover:text-red-300 text-sm">
+                            className="text-red-400 hover:text-red-300 text-sm p-1"
+                            title="Eliminar curso"
+                          >
                               <XCircle className="w-4 h-4" />
                             </button>
                          </div>
@@ -556,30 +526,6 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
                </tbody>
              </table>
  
-            {showUploadCourseId && (
-              <div className="mt-6 p-4 bg-white/5 rounded-xl border border-white/10">
-                <div className="text-sm font-medium text-slate-50 mb-3">Subir material</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-slate-400">Título</label>
-                    <input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-400">Archivo</label>
-                    <input type="file" onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)} className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100" />
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center gap-2">
-                  <button onClick={uploadMaterial} disabled={uploading || !uploadFile} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50">
-                    Subir
-                  </button>
-                  <button onClick={() => { setShowUploadCourseId(null); setUploadTitle(""); setUploadFile(null); }} className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-100 text-sm">
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            )}
-
              <div className="mt-10">
                <h2 className="text-lg font-semibold text-slate-50 mb-4">
                  <Users className="w-5 h-5 mr-2 inline text-blue-400" />
