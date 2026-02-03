@@ -1,7 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { PendientesList } from "./PendientesList";
-import { User, Activity, TrendingUp, Users, BookOpen, DollarSign, AlertTriangle, Database, Settings, LogOut } from "lucide-react";
+import { User, Activity, TrendingUp, Users, BookOpen, DollarSign, AlertTriangle, Database, Settings, LogOut, FileText } from "lucide-react";
 import { headers } from "next/headers";
 import { devInscripciones, devIntereses } from "@/lib/devstore";
 
@@ -128,6 +128,10 @@ export default async function AdminDashboardPage() {
             <a href="/admin/cursos" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
               <Database className="w-4 h-4 mr-2" />
               Cursos
+            </a>
+            <a href="/admin/evaluaciones" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
+              <FileText className="w-4 h-4 mr-2" />
+              Evaluaciones
             </a>
           </nav>
         </aside>

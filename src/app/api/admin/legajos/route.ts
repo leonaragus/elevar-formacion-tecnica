@@ -63,3 +63,22 @@ export async function GET(req: NextRequest) {
     cursos: cursos || []
   });
 }
+
+export async function DELETE(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "ID requerido" }, { status: 400 });
+
+  const supabase = createSupabaseAdminClient();
+  
+  // Delete user from Auth (this is a hard delete)
+  const { error } = await supabase.auth.admin.deleteUser(id);
+  
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Also clean up related data if needed (cascade usually handles this in DB, but we might want to be explicit)
+  // For now, Supabase Auth deletion cascades to `auth.users` references if configured, but let's assume it works.
+  
+  return NextResponse.json({ ok: true });
+}

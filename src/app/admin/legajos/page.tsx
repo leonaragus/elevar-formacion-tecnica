@@ -71,6 +71,22 @@ export default function AdminLegajosPage() {
     cursoById.set(curso.id, curso);
   }
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("¿Está seguro de que desea eliminar este legajo? Esta acción no se puede deshacer.")) return;
+    
+    try {
+      const res = await fetch(`/api/admin/legajos?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setLegajos(prev => prev.filter(l => l.id !== id));
+        alert("Legajo eliminado correctamente");
+      } else {
+        alert("Error al eliminar el legajo");
+      }
+    } catch (e) {
+      alert("Error de red");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col md:flex-row">
@@ -86,9 +102,13 @@ export default function AdminLegajosPage() {
               <Settings className="w-4 h-4 mr-2" />
               Ajustes
             </a>
-            <a href="/admin/pagos" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
-              <DollarSign className="w-4 h-4 mr-2" />
-              Pagos
+            <a href="/admin/cursos" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
+              <Database className="w-4 h-4 mr-2" />
+              Cursos
+            </a>
+            <a href="/admin/evaluaciones" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
+              <FileText className="w-4 h-4 mr-2" />
+              Evaluaciones
             </a>
             <a href="/admin/legajos" className="rounded-lg bg-white/5 px-3 py-2 text-sm font-medium text-slate-50">
               <Users className="w-4 h-4 mr-2" />

@@ -142,14 +142,13 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
   const [uploadTitle, setUploadTitle] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
    const saveNewCourse = async () => {
      try {
        setSaving(true);
-       const res = await fetch("/api/admin/cursos", {
-         method: "POST",
-         headers: { "Content-Type": "application/json" },
-         body: JSON.stringify({
+       const method = editingId ? "PUT" : "POST";
+       const body: any = {
            titulo: newTitulo,
            descripcion: newDescripcion,
            duracion: newDuracion,
@@ -158,14 +157,21 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
            nivel: newNivel,
            precio: newPrecio,
            estado: newEstado,
-         }),
+       };
+       if (editingId) body.id = editingId;
+
+       const res = await fetch("/api/admin/cursos", {
+         method,
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify(body),
        });
        const json = await res.json().catch(() => null as any);
        if (!res.ok || !json?.ok) {
-         alert(json?.error || "No se pudo crear el curso");
+         alert(json?.error || "No se pudo guardar el curso");
          return;
        }
        setShowNew(false);
+       setEditingId(null);
        setNewTitulo("");
        setNewDescripcion("");
        setNewDuracion("");
@@ -178,11 +184,38 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
        setCursos(Array.isArray(json2?.cursos) ? json2.cursos : []);
        setAlumnos(Array.isArray(json2?.alumnos) ? json2.alumnos : []);
      } catch (e) {
-       alert("Error al crear curso");
+       alert("Error al guardar curso");
      } finally {
        setSaving(false);
        setLoading(false);
      }
+   };
+
+   const startEdit = (curso: CursoRow) => {
+      setEditingId(curso.id);
+      setNewTitulo(curso.titulo);
+      setNewDescripcion(curso.descripcion);
+      setNewDuracion(curso.duracion);
+      setNewModalidad(curso.modalidad as any);
+      setNewCategoria(curso.categoria);
+      setNewNivel(curso.nivel as any);
+      setNewPrecio(curso.precio);
+      setNewEstado(curso.estado as any);
+      setShowNew(true);
+   };
+
+   const deleteCourse = async (id: string) => {
+      if (!confirm("¿Eliminar este curso?")) return;
+      try {
+          const res = await fetch(`/api/admin/cursos?id=${id}`, { method: "DELETE" });
+          if (res.ok) {
+              setCursos(prev => prev.filter(c => c.id !== id));
+          } else {
+              alert("Error al eliminar");
+          }
+      } catch {
+          alert("Error de red");
+      }
    };
  
   const uploadMaterial = async () => {
@@ -292,10 +325,14 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
                Legajos
              </a>
              <a href="/admin/cursos" className="rounded-lg bg-white/5 px-3 py-2 text-sm font-medium text-slate-50">
-               <Database className="w-4 h-4 mr-2" />
-               Cursos
-             </a>
-           </nav>
+              <Database className="w-4 h-4 mr-2" />
+              Cursos
+            </a>
+            <a href="/admin/evaluaciones" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
+              <FileText className="w-4 h-4 mr-2" />
+              Evaluaciones
+            </a>
+          </nav>
          </aside>
  
          <main className="flex-1 p-4 md:p-8">
@@ -521,35 +558,29 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
                                <Eye className="w-4 h-4" />
                              </button>
                            <button
-                             onClick={() => {
-                               console.log("Editar:", curso.id);
-                             }}
-                             className="text-green-400 hover:text-green-300 text-sm">
-                               <Edit className="w-4 h-4" />
-                             </button>
-                           <button
-                             onClick={() => setShowUploadCourseId(curso.id)}
-                             className="text-purple-400 hover:text-purple-300 text-sm">
-                               <Upload className="w-4 h-4" />
-                           </button>
-                           <button
-                             onClick={() => {
-                               if (confirm("¿Está seguro que desea cambiar el estado de este curso?")) {
-                                 console.log("Cambiar estado:", curso.id);
-                               }
-                             }}
-                             className="text-yellow-400 hover:text-yellow-300 text-sm">
-                               <Clock className="w-4 h-4" />
-                             </button>
-                           <button
-                             onClick={() => {
-                               if (confirm("¿Está seguro que desea eliminar este curso?")) {
-                                 console.log("Eliminar:", curso.id);
-                               }
-                             }}
-                             className="text-red-400 hover:text-red-300 text-sm">
-                               <XCircle className="w-4 h-4" />
-                             </button>
+                            onClick={() => startEdit(curso)}
+                            className="text-green-400 hover:text-green-300 text-sm">
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          <button
+                            onClick={() => setShowUploadCourseId(curso.id)}
+                            className="text-purple-400 hover:text-purple-300 text-sm">
+                              <Upload className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm("¿Está seguro que desea cambiar el estado de este curso?")) {
+                                console.log("Cambiar estado:", curso.id);
+                              }
+                            }}
+                            className="text-yellow-400 hover:text-yellow-300 text-sm">
+                              <Clock className="w-4 h-4" />
+                            </button>
+                          <button
+                            onClick={() => deleteCourse(curso.id)}
+                            className="text-red-400 hover:text-red-300 text-sm">
+                              <XCircle className="w-4 h-4" />
+                            </button>
                          </div>
                        </td>
                      </tr>
