@@ -122,8 +122,21 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
       .eq("user_id", user.id)
       .limit(100);
     
-    if (insc) {
-        const rows = (Array.isArray(insc) ? insc : []).filter((r: any) => r?.curso_id != null);
+    // Also check by email, as some records might have been created with email before user had a UUID
+    let inscEmail: any[] = [];
+    if (user.email) {
+       const { data } = await supabase
+          .from("cursos_alumnos")
+          .select("curso_id, estado")
+          .eq("user_id", user.email)
+          .limit(100);
+       if (data) inscEmail = data;
+    }
+
+    const allInsc = [...(Array.isArray(insc) ? insc : []), ...inscEmail];
+    
+    if (allInsc.length > 0) {
+        const rows = allInsc.filter((r: any) => r?.curso_id != null);
         activeCourseIds = rows.filter((r: any) => r?.estado === "activo").map((r: any) => String(r.curso_id));
         const pendingFromInsc = rows.filter((r: any) => r?.estado === "pendiente").map((r: any) => String(r.curso_id));
         hasActive = activeCourseIds.length > 0;
@@ -224,6 +237,10 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
             {decodeURIComponent(errorMsg)}
           </div>
         )}
+
+        <div className="mb-4 p-2 text-xs text-gray-400 bg-gray-900/10 rounded font-mono">
+           Debug: {user?.email || "No User"} | Active: {activeCourseIds.length} | Pending: {pendingCourseIds.length} | Enrolled: {enrolledIds.join(",")}
+        </div>
 
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
           <div>
