@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Moon, Sun, User, Menu, LogOut, Settings, LogIn, UserPlus } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import Link from "next/link";
