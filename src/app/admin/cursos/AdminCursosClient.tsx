@@ -32,49 +32,61 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
    const [cursos, setCursos] = useState<CursoRow[]>([]);
    const [alumnos, setAlumnos] = useState<AlumnoRow[]>([]);
    const [pendientes, setPendientes] = useState<{ user_id: string; curso_id: string; estado: string }[]>([]);
-   const [loading, setLoading] = useState(true);
-   const [user, setUser] = useState<any>(null);
-   const supabase = createSupabaseBrowserClient();
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
+  const supabase = createSupabaseBrowserClient();
   const demoEnabled = process.env.NEXT_PUBLIC_ENABLE_DEMO === "1";
- 
-   useEffect(() => {
+
+  useEffect(() => {
     const fetchData = async () => {
-       try {
-         const { data: { user: userData } } = await supabase.auth.getUser();
-         setUser(userData);
- 
-       const res = await fetch(`/api/admin/cursos`, { cache: "no-store" }).catch(() => null as any);
-         const json = await res?.json().catch(() => null as any);
- 
-         setCursos(Array.isArray(json?.cursos) ? json.cursos : []);
-         setAlumnos(Array.isArray(json?.alumnos) ? json.alumnos : []);
-       let resPend = await fetch(`/api/admin/inscripciones`, { cache: "no-store" }).catch(() => null as any);
-       let jsonPend = await resPend?.json().catch(() => null as any);
-       if (resPend && resPend.status === 401 && demoEnabled) {
-         try {
-           await fetch("/api/profesor/access", {
-             method: "POST",
-             headers: { "Content-Type": "application/json" },
-             body: JSON.stringify({ code: "vanesa2025" }),
-           });
-           const resCursos = await fetch(`/api/admin/cursos`, { cache: "no-store" }).catch(() => null as any);
-           const jsonCursos = await resCursos?.json().catch(() => null as any);
-           setCursos(Array.isArray(jsonCursos?.cursos) ? jsonCursos.cursos : []);
-           setAlumnos(Array.isArray(jsonCursos?.alumnos) ? jsonCursos.alumnos : []);
-           resPend = await fetch(`/api/admin/inscripciones`, { cache: "no-store" }).catch(() => null as any);
-           jsonPend = await resPend?.json().catch(() => null as any);
-         } catch {}
-       }
-       setPendientes(Array.isArray(jsonPend?.pendientes) ? jsonPend.pendientes : []);
-       } catch (error) {
-         console.error("Error fetching data:", error);
-       } finally {
-         setLoading(false);
-       }
-     };
- 
-     fetchData();
-   }, [supabase]);
+      try {
+        setLoadError(null);
+        const { data: { user: userData } } = await supabase.auth.getUser();
+        setUser(userData);
+
+        const res = await fetch(`/api/admin/cursos`, { cache: "no-store" }).catch(() => null as any);
+        const json = await res?.json().catch(() => null as any);
+
+        setCursos(Array.isArray(json?.cursos) ? json.cursos : []);
+        setAlumnos(Array.isArray(json?.alumnos) ? json.alumnos : []);
+        
+        let resPend = await fetch(`/api/admin/inscripciones`, { cache: "no-store" }).catch(() => null as any);
+        let jsonPend = await resPend?.json().catch(() => null as any);
+        
+        if (jsonPend && !jsonPend.ok && jsonPend.error) {
+           setLoadError(`Error cargando inscripciones: ${jsonPend.error}`);
+        }
+
+        if (resPend && resPend.status === 401 && demoEnabled) {
+          try {
+            await fetch("/api/profesor/access", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ code: "vanesa2025" }),
+            });
+            const resCursos = await fetch(`/api/admin/cursos`, { cache: "no-store" }).catch(() => null as any);
+            const jsonCursos = await resCursos?.json().catch(() => null as any);
+            setCursos(Array.isArray(jsonCursos?.cursos) ? jsonCursos.cursos : []);
+            setAlumnos(Array.isArray(jsonCursos?.alumnos) ? jsonCursos.alumnos : []);
+            resPend = await fetch(`/api/admin/inscripciones`, { cache: "no-store" }).catch(() => null as any);
+            jsonPend = await resPend?.json().catch(() => null as any);
+            if (jsonPend && !jsonPend.ok && jsonPend.error) {
+               setLoadError(`Error cargando inscripciones: ${jsonPend.error}`);
+            }
+          } catch {}
+        }
+        setPendientes(Array.isArray(jsonPend?.pendientes) ? jsonPend.pendientes : []);
+      } catch (error: any) {
+        console.error("Error fetching data:", error);
+        setLoadError(error?.message || "Error desconocido");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [supabase]);
  
    const [searchTerm, setSearchTerm] = useState("");
    const [filterEstado, setFilterEstado] = useState("");
@@ -542,8 +554,13 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
                <h2 className="text-lg font-semibold text-slate-50 mb-4">
                  <Users className="w-5 h-5 mr-2 inline text-blue-400" />
                  Solicitudes de ingreso pendientes
-               </h2>
-               <div className="rounded-xl border border-white/10 bg-white/5">
+              </h2>
+              {loadError && (
+                 <div className="mb-4 p-4 rounded-lg bg-red-900/50 border border-red-500/50 text-red-200 text-sm">
+                   {loadError}
+                 </div>
+              )}
+              <div className="rounded-xl border border-white/10 bg-white/5">
                  {pendientes.length === 0 ? (
                    <div className="p-6 text-sm text-slate-400">No hay solicitudes pendientes.</div>
                  ) : (
