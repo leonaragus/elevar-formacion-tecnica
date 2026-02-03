@@ -7,7 +7,7 @@ import { User, Save, AlertCircle, CheckCircle } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function PerfilPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -19,9 +19,13 @@ export default function PerfilPage() {
     telefono: "",
     direccion: "",
     fecha_nacimiento: "",
+    email: "", // Added email to state
   });
 
   useEffect(() => {
+    // Wait for auth to finish loading
+    if (authLoading) return;
+
     if (user) {
       setFormData({
         nombre: user.user_metadata?.nombre || "",
@@ -30,10 +34,28 @@ export default function PerfilPage() {
         telefono: user.user_metadata?.telefono || "",
         direccion: user.user_metadata?.direccion || "",
         fecha_nacimiento: user.user_metadata?.fecha_nacimiento || "",
+        email: user.email || "",
       });
       setLoading(false);
+    } else {
+      // Fallback: check cookie
+      const getCookie = (name: string) => {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop()?.split(";").shift();
+      };
+      const email = decodeURIComponent(getCookie("student_email") || "");
+      
+      if (email) {
+        setFormData(prev => ({ ...prev, email }));
+        // Optionally fetch existing data here if we had an endpoint
+        setLoading(false);
+      } else {
+        // No user, no cookie -> Redirect or just show form empty
+        setLoading(false);
+      }
     }
-  }, [user]);
+  }, [user, authLoading]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
