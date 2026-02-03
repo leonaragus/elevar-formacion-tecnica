@@ -68,22 +68,38 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
   }
 
   if (user?.id) {
+    // Check by ID
     const { data: insc } = await supabase
       .from("cursos_alumnos")
       .select("curso_id, estado")
       .eq("user_id", user.id)
       .limit(20);
-    const estados = Array.isArray(insc) ? insc.map((r: any) => r.estado) : [];
+    
+    // Check by Email
+    let inscEmail: any[] = [];
+    if (user.email) {
+       const { data } = await supabase
+          .from("cursos_alumnos")
+          .select("curso_id, estado")
+          .eq("user_id", user.email)
+          .limit(20);
+       if (data) inscEmail = data;
+    }
+
+    const allInsc = [...(Array.isArray(insc) ? insc : []), ...inscEmail];
+    
+    const estados = allInsc.map((r: any) => r.estado);
     hasActive = estados.includes("activo");
     hasPending = estados.includes("pendiente");
-    const activeRow = Array.isArray(insc) ? (insc as any[]).find((r) => r?.estado === "activo" && r?.curso_id != null) : null;
+    
+    const activeRow = allInsc.find((r) => r?.estado === "activo" && r?.curso_id != null);
     const activeCourseId = activeRow?.curso_id != null ? String(activeRow.curso_id) : "";
     if (hasActive && activeCourseId) {
       if (!selectedId || selectedId !== activeCourseId) selectedId = activeCourseId;
       estadoCursoSeleccionado = "activo";
     }
     if (selectedId) {
-      const row = Array.isArray(insc) ? (insc as any[]).find((r) => String(r.curso_id) === selectedId) : null;
+      const row = allInsc.find((r) => String(r.curso_id) === selectedId);
       const e = row?.estado;
       if (e === "pendiente") estadoCursoSeleccionado = "pendiente";
       if (e === "activo") estadoCursoSeleccionado = "activo";

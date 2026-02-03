@@ -34,15 +34,30 @@ export default function EvaluacionesPage() {
     const run = async () => {
       const supabase = createSupabaseBrowserClient();
       if (user?.id) {
+        // Check by ID
         const { data: insc } = await supabase
           .from("cursos_alumnos")
           .select("curso_id,estado")
           .eq("user_id", user.id)
           .limit(20);
-        const estados = Array.isArray(insc) ? insc.map((r: any) => r.estado) : [];
+        
+        // Check by Email
+        let inscEmail: any[] = [];
+        if (user.email) {
+           const { data } = await supabase
+              .from("cursos_alumnos")
+              .select("curso_id,estado")
+              .eq("user_id", user.email)
+              .limit(20);
+           if (data) inscEmail = data;
+        }
+
+        const allInsc = [...(Array.isArray(insc) ? insc : []), ...inscEmail];
+
+        const estados = allInsc.map((r: any) => r.estado);
         setHasActive(estados.includes("activo"));
         setHasPending(estados.includes("pendiente"));
-        const activeRow = Array.isArray(insc) ? (insc as any[]).find((r) => r?.estado === "activo" && r?.curso_id != null) : null;
+        const activeRow = allInsc.find((r) => r?.estado === "activo" && r?.curso_id != null);
         const activeId = activeRow?.curso_id != null ? String(activeRow.curso_id) : "";
         if (activeId) {
           const { data: curso } = await supabase
