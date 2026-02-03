@@ -53,14 +53,14 @@ export async function GET(req: NextRequest) {
         // Consultar intereses (solicitudes por email)
         const { data: intereses, error: errorIntereses } = await supabase
           .from("intereses")
-          .select("email, course_id, created_at")
+          .select("*")
           .limit(50);
         
         if (!errorIntereses && intereses) {
           const interesesMapeados = intereses.map((i: any) => ({
              user_id: i.email, 
              email: i.email,
-             curso_id: i.course_id,
+             curso_id: i.course_id || i.curso_id, // Soporte para ambos nombres
              estado: "pendiente",
              created_at: i.created_at
           }));
