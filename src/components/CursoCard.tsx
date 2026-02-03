@@ -68,12 +68,21 @@ export default function CursoCard({ curso, professor, estadoCurso }: CursoCardPr
 
         <div className="flex items-center justify-between">
           {estadoCurso === "activo" ? (
-            <Link
-              href={`/cursos/${curso.id}`}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
-            >
-              Bienvenido al cursado de {curso.titulo}
-            </Link>
+            <div className="flex flex-col gap-2 w-full">
+              <Link
+                href={`/cursos/${curso.id}`}
+                className="w-full text-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                Bienvenido al cursado de {curso.titulo}
+              </Link>
+              <Link
+                href="/perfil"
+                className="w-full text-center px-4 py-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                <Users className="w-4 h-4" />
+                Completar mis datos personales
+              </Link>
+            </div>
           ) : estadoCurso === "pendiente" ? (
             <button
               disabled
