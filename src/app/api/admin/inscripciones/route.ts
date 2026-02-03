@@ -44,7 +44,28 @@ export async function GET(req: NextRequest) {
         .select("user_id, curso_id, estado")
         .eq("estado", "pendiente")
         .limit(100);
-      if (error) {
+      
+      let combined = [];
+      if (!error && data) {
+        combined = [...data];
+      }
+
+      // También traer de intereses (solicitudes por email)
+      const { data: intereses } = await supabase
+        .from("intereses")
+        .select("email, course_id")
+        .limit(100);
+      
+      if (intereses && intereses.length > 0) {
+        const mapped = intereses.map((i: any) => ({
+          user_id: i.email,
+          curso_id: i.course_id || i.curso_id, // handle potential naming variance
+          estado: "pendiente"
+        }));
+        combined = [...combined, ...mapped];
+      }
+
+      if (error && combined.length === 0) {
         const msg = String(error.message || "").toLowerCase();
         const shouldFallback =
           msg.includes("invalid api key") ||
@@ -57,9 +78,13 @@ export async function GET(req: NextRequest) {
         }
         return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
       }
-      const base = Array.isArray(data) ? data : [];
+      
       const pend = devInscripciones.filter((i) => i.estado === "pendiente");
-      return NextResponse.json({ ok: true, pendientes: [...base, ...pend] });
+      // Deduplicate by user_id + curso_id
+      const all = [...combined, ...pend];
+      const unique = all.filter((v, i, a) => a.findIndex(t => t.user_id === v.user_id && t.curso_id === v.curso_id) === i);
+      
+      return NextResponse.json({ ok: true, pendientes: unique });
     } else {
       const pend = devInscripciones.filter((i) => i.estado === "pendiente");
       return NextResponse.json({ ok: true, pendientes: pend });
