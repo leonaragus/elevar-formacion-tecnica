@@ -72,7 +72,7 @@ export default function CursoCard({ curso, professor, estadoCurso }: CursoCardPr
               href={`/cursos/${curso.id}`}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
             >
-              Acceder al curso
+              Bienvenido al cursado de {curso.titulo}
             </Link>
           ) : estadoCurso === "pendiente" ? (
             <button

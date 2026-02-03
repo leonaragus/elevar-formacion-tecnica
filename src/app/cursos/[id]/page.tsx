@@ -29,15 +29,33 @@ export default async function CursoDetallePage({ params }: { params: { id: strin
 
   let estado: "ninguno" | "pendiente" | "activo" = "ninguno";
   if (user?.id) {
+    // Check by ID
     const { data: insc } = await supabase
       .from("cursos_alumnos")
       .select("estado")
       .eq("user_id", user.id)
       .eq("curso_id", id)
       .limit(1);
-    const e = Array.isArray(insc) && insc[0]?.estado;
-    if (e === "pendiente") estado = "pendiente";
-    if (e === "activo") estado = "activo";
+    
+    // Check by Email
+    let inscEmail: any[] = [];
+    if (user.email) {
+       const { data } = await supabase
+          .from("cursos_alumnos")
+          .select("estado")
+          .eq("user_id", user.email)
+          .eq("curso_id", id)
+          .limit(1);
+       if (data) inscEmail = data;
+    }
+
+    const allInsc = [...(Array.isArray(insc) ? insc : []), ...inscEmail];
+    
+    if (allInsc.length > 0) {
+        const e = allInsc[0]?.estado;
+        if (e === "pendiente") estado = "pendiente";
+        if (e === "activo") estado = "activo";
+    }
   }
 
   return (
@@ -110,12 +128,6 @@ export default async function CursoDetallePage({ params }: { params: { id: strin
                     Pagos
                   </button>
                 </a>
-                {estado === "activo" && (
-                  <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
-                    <CheckCircle className="w-4 h-4" />
-                    Acceso habilitado
-                  </div>
-                )}
               </div>
             </div>
           </>
