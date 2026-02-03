@@ -85,26 +85,6 @@ export async function GET(req: NextRequest) {
       
       return NextResponse.json({ ok: true, pendientes: unique, debug: debugInfo });
     } else {
-        const msg = String(error.message || "").toLowerCase();
-        const shouldFallback =
-          msg.includes("invalid api key") ||
-          msg.includes("row-level security") ||
-          msg.includes("permission denied") ||
-          msg.includes("violates");
-        if (shouldFallback) {
-          const pend = devInscripciones.filter((i) => i.estado === "pendiente");
-          return NextResponse.json({ ok: true, pendientes: pend });
-        }
-        return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
-      }
-      
-      const pend = devInscripciones.filter((i) => i.estado === "pendiente");
-      // Deduplicate by user_id + curso_id
-      const all = [...combined, ...pend];
-      const unique = all.filter((v, i, a) => a.findIndex(t => t.user_id === v.user_id && t.curso_id === v.curso_id) === i);
-      
-      return NextResponse.json({ ok: true, pendientes: unique });
-    } else {
       const pend = devInscripciones.filter((i) => i.estado === "pendiente");
       return NextResponse.json({ ok: true, pendientes: pend });
     }
