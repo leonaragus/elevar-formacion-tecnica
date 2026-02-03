@@ -456,7 +456,7 @@ import Link from "next/link";
                    paginatedCursos.map((curso) => (
                      <tr key={curso.id} className="hover:bg-white/10">
                        <td className="px-4 py-3">
-                          <Link href={`/admin/detalle-curso/${curso.id}`} className="block group" onClick={() => console.log("Navigating to:", curso.id)}>
+                          <Link href={`/admin/detalle-curso?id=${curso.id}`} className="block group" onClick={() => console.log("Navigating to:", curso.id)}>
                           <div className="text-sm font-medium text-slate-50 group-hover:text-blue-400 transition-colors flex items-center gap-2">
                              {curso.titulo}
                              <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -493,7 +493,7 @@ import Link from "next/link";
                        <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <Link
-                            href={`/admin/detalle-curso/${curso.id}`}
+                            href={`/admin/detalle-curso?id=${curso.id}`}
                             className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition-colors"
                           >
                               <Settings className="w-3 h-3" />
