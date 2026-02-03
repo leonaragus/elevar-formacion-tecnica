@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { devInscripciones, upsertInscripcion, deleteInscripcion } from "@/lib/devstore";
 
-function isAuthorized(req: NextRequest) {
+async function isAuthorized(req: NextRequest) {
   const token = req.headers.get("x-admin-token") || req.headers.get("X-Admin-Token");
   const expected = process.env.ADMIN_TOKEN;
   const hasHeaderOk = Boolean(token && expected && token === expected);
   const hasProfCookie = req.cookies.get("prof_code_ok")?.value === "1";
-  return hasHeaderOk || hasProfCookie;
+  
+  if (hasHeaderOk || hasProfCookie) return true;
+
+  // Check Supabase session
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    return !!user;
+  } catch {
+    return false;
+  }
 }
 
 async function resolveUserIdFromEmail(supabase: ReturnType<typeof createSupabaseAdminClient>, email: string) {
@@ -28,7 +39,7 @@ async function resolveUserIdFromEmail(supabase: ReturnType<typeof createSupabase
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
   try {
@@ -94,7 +105,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
   try {
@@ -155,7 +166,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
   try {
