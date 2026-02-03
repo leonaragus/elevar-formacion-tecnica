@@ -93,6 +93,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Archivo y curso_id requeridos" }, { status: 400 });
     }
 
+    // Check Service Role Key for Vercel
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!serviceKey || serviceKey.length < 20) {
+       return NextResponse.json({ 
+         ok: false, 
+         error: "Error de Configuración: Falta SUPABASE_SERVICE_ROLE_KEY en Vercel. No se pueden subir archivos sin permisos de administrador." 
+       }, { status: 500 });
+    }
+
     const supabase = createSupabaseAdminClient();
     const bucket = "materiales";
     

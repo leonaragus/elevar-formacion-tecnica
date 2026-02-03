@@ -78,16 +78,26 @@ export function AdminCursoDetailClient({ id }: AdminCursoDetailClientProps) {
       if (uploadTitle) fd.append("titulo", uploadTitle);
       
       const res = await fetch("/api/admin/materiales", { method: "POST", body: fd });
-      if (res.ok) {
+      let json;
+      try {
+        json = await res.json();
+      } catch (e) {
+        console.error("Error parsing JSON response", e);
+      }
+
+      if (res.ok && json?.ok) {
         setUploadFile(null);
         setUploadTitle("");
         alert("Material subido correctamente");
         fetchData();
       } else {
-        alert("Error al subir");
+        const errorMsg = json?.error || res.statusText || "Error desconocido";
+        console.error("Upload error:", errorMsg);
+        alert(`Error al subir: ${errorMsg}`);
       }
-    } catch {
-      alert("Error de red");
+    } catch (e: any) {
+      console.error("Network error:", e);
+      alert(`Error de red: ${e.message || "Intente nuevamente"}`);
     } finally {
       setUploading(false);
     }
