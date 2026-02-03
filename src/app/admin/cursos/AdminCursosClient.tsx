@@ -1,7 +1,7 @@
 "use client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useState, useEffect } from "react";
-import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, Settings, LogOut, Search, Filter, Download, Trash2, Plus, Edit, Eye, CheckCircle, Clock, XCircle, Upload } from "lucide-react";
+import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, Settings, LogOut, Search, Filter, Download, Trash2, Plus, Edit, Eye, CheckCircle, Clock, XCircle, Upload, ExternalLink } from "lucide-react";
 import Link from "next/link";
  
  type CursoRow = {
@@ -429,8 +429,9 @@ import Link from "next/link";
                      Cancelar
                    </button>
                  </div>
-               </div>
-             <table className="w-full">
+              </div>
+            )}
+            <table className="w-full">
                <thead className="text-left">
                  <tr>
                    <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Curso</th>
@@ -455,9 +456,14 @@ import Link from "next/link";
                    paginatedCursos.map((curso) => (
                      <tr key={curso.id} className="hover:bg-white/10">
                        <td className="px-4 py-3">
-                         <div className="text-sm font-medium text-slate-50">{curso.titulo}</div>
-                         <div className="text-xs text-slate-400">ID: {curso.id}</div>
-                       </td>
+                        <Link href={`/admin/cursos/${curso.id}`} className="block group">
+                          <div className="text-sm font-medium text-slate-50 group-hover:text-blue-400 transition-colors flex items-center gap-2">
+                             {curso.titulo}
+                             <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                          <div className="text-xs text-slate-400">ID: {curso.id}</div>
+                        </Link>
+                      </td>
                        <td className="px-4 py-3">
                          <div className="text-sm text-slate-400 line-clamp-2">{curso.descripcion || "Sin descripción"}</div>
                        </td>
@@ -485,41 +491,41 @@ import Link from "next/link";
                            {alumnos.filter(al => al.curso_id === curso.id).length}</div>
                        </td>
                        <td className="px-4 py-3">
-                         <div className="flex items-center gap-1">
-                           <Link
-                             href={`/admin/cursos/${curso.id}`}
-                             className="text-blue-400 hover:text-blue-300 text-sm p-1"
-                             title="Ver detalles y gestionar"
-                           >
-                               <Eye className="w-4 h-4" />
-                           </Link>
-                           <button
-                            onClick={() => startEdit(curso)}
-                            className="text-green-400 hover:text-green-300 text-sm p-1"
-                            title="Editar información"
-                           >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                          <button
-                            onClick={() => {
-                              if (confirm("¿Está seguro que desea cambiar el estado de este curso?")) {
-                                console.log("Cambiar estado:", curso.id);
-                              }
-                            }}
-                            className="text-yellow-400 hover:text-yellow-300 text-sm p-1"
-                            title="Cambiar estado"
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/admin/cursos/${curso.id}`}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition-colors"
                           >
-                              <Clock className="w-4 h-4" />
-                            </button>
+                              <Settings className="w-3 h-3" />
+                              Gestionar
+                          </Link>
                           <button
-                            onClick={() => deleteCourse(curso.id)}
-                            className="text-red-400 hover:text-red-300 text-sm p-1"
-                            title="Eliminar curso"
+                           onClick={() => startEdit(curso)}
+                           className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                           title="Editar información básica"
                           >
-                              <XCircle className="w-4 h-4" />
-                            </button>
-                         </div>
-                       </td>
+                             <Edit className="w-4 h-4" />
+                           </button>
+                         <button
+                           onClick={() => {
+                             if (confirm("¿Está seguro que desea cambiar el estado de este curso?")) {
+                               console.log("Cambiar estado:", curso.id);
+                             }
+                           }}
+                           className="p-1.5 text-slate-400 hover:text-yellow-400 hover:bg-yellow-400/10 rounded-lg transition-colors"
+                           title="Cambiar estado"
+                         >
+                             <Clock className="w-4 h-4" />
+                           </button>
+                         <button
+                           onClick={() => deleteCourse(curso.id)}
+                           className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                           title="Eliminar curso"
+                         >
+                             <Trash2 className="w-4 h-4" />
+                           </button>
+                        </div>
+                      </td>
                      </tr>
                    ))
                  )}
