@@ -1,65 +1,27 @@
+
 import { MainLayout } from "@/components/MainLayout";
-import { FileText, Download, Eye, Calendar } from "lucide-react";
+import { FileText, Download, Eye, Calendar, AlertTriangle } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { devMateriales } from "@/lib/devstore";
 import { cookies } from "next/headers";
+import Link from "next/link";
 
-const materialesPlaceholder = [
-  {
-    id: 1,
-    curso_id: "1",
-    titulo: "Introducción a JavaScript - Módulo 1",
-    curso: "Programación Web Full Stack",
-    tipo: "PDF",
-    tamaño: "2.4 MB",
-    fecha: "15 Ene 2026",
-    descargas: 45,
-  },
-  {
-    id: 2,
-    curso_id: "1",
-    titulo: "Guía de React Hooks",
-    curso: "Programación Web Full Stack",
-    tipo: "PDF",
-    tamaño: "1.8 MB",
-    fecha: "20 Ene 2026",
-    descargas: 32,
-  },
-  {
-    id: 3,
-    curso_id: "3",
-    titulo: "Principios de Diseño UX",
-    curso: "Diseño UX/UI Profesional",
-    tipo: "PDF",
-    tamaño: "5.2 MB",
-    fecha: "18 Ene 2026",
-    descargas: 28,
-  },
-  {
-    id: 4,
-    curso_id: "4",
-    titulo: "SQL Avanzado - Ejercicios",
-    curso: "Base de Datos y SQL",
-    tipo: "PDF",
-    tamaño: "1.2 MB",
-    fecha: "22 Ene 2026",
-    descargas: 51,
-  },
-];
-
-export default async function MaterialesPage({ searchParams }: { searchParams?: { curso_id?: string } }) {
+export default async function MaterialesPage({ searchParams }: { searchParams?: Promise<{ curso_id?: string }> }) {
+  const resolvedSearchParams = await searchParams;
   const cookieStore = await cookies();
   const studentOk = cookieStore.get("student_ok")?.value === "1";
   const studentCourseId = cookieStore.get("student_course_id")?.value;
 
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  let selectedId = String(searchParams?.curso_id ?? "");
-  const site = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  
+  let selectedId = String(resolvedSearchParams?.curso_id ?? "");
+  
+  // Logic to determine active course
   let hasActive = false;
   let hasPending = false;
   let cursos: Array<{ id: string; titulo: string }> = [];
   let estadoCursoSeleccionado: "ninguno" | "pendiente" | "activo" = "ninguno";
+  let activeCourseTitle = "";
 
   if (!user && studentOk && typeof studentCourseId === "string" && studentCourseId) {
     hasActive = true;
@@ -71,7 +33,7 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
     // Check by ID
     const { data: insc } = await supabase
       .from("cursos_alumnos")
-      .select("curso_id, estado")
+      .select("curso_id, estado, cursos(titulo)")
       .eq("user_id", user.id)
       .limit(20);
     
@@ -80,7 +42,7 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
     if (user.email) {
        const { data } = await supabase
           .from("cursos_alumnos")
-          .select("curso_id, estado")
+          .select("curso_id, estado, cursos(titulo)")
           .eq("user_id", user.email)
           .limit(20);
        if (data) inscEmail = data;
@@ -88,48 +50,90 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
 
     const allInsc = [...(Array.isArray(insc) ? insc : []), ...inscEmail];
     
-    const estados = allInsc.map((r: any) => r.estado);
+    // Deduplicate by curso_id
+    const uniqueInsc = Array.from(new Map(allInsc.map(item => [item.curso_id, item])).values());
+    
+    const estados = uniqueInsc.map((r: any) => r.estado);
     hasActive = estados.includes("activo");
     hasPending = estados.includes("pendiente");
     
-    const activeRow = allInsc.find((r) => r?.estado === "activo" && r?.curso_id != null);
+    // Find active course
+    const activeRow = uniqueInsc.find((r) => r?.estado === "activo" && r?.curso_id != null);
     const activeCourseId = activeRow?.curso_id != null ? String(activeRow.curso_id) : "";
+    
     if (hasActive && activeCourseId) {
       if (!selectedId || selectedId !== activeCourseId) selectedId = activeCourseId;
       estadoCursoSeleccionado = "activo";
+      activeCourseTitle = activeRow?.cursos?.titulo || "";
     }
+    
     if (selectedId) {
-      const row = allInsc.find((r) => String(r.curso_id) === selectedId);
+      const row = uniqueInsc.find((r) => String(r.curso_id) === selectedId);
       const e = row?.estado;
       if (e === "pendiente") estadoCursoSeleccionado = "pendiente";
-      if (e === "activo") estadoCursoSeleccionado = "activo";
+      if (e === "activo") {
+          estadoCursoSeleccionado = "activo";
+          activeCourseTitle = row?.cursos?.titulo || "";
+      }
     }
+
+    // If no active course, list available courses
     if (!hasActive && !hasPending && !selectedId) {
       const { data, error } = await supabase
         .from("cursos")
         .select("id, titulo")
-        .order("orden", { ascending: true })
-        .limit(50);
-      if (!error && Array.isArray(data) && data.length > 0) {
-        cursos = (data as any[]).map((c) => ({
+        .eq("estado", "activo")
+        .order("titulo", { ascending: true });
+        
+      if (!error && data) {
+        cursos = data.map((c) => ({
           id: String(c.id),
           titulo: String(c.titulo ?? "Curso"),
         }));
-      } else {
-        const res = await fetch(`${site}/api/admin/cursos?public=1`, { cache: "no-store", headers: { "x-public": "1" } }).catch(() => null as any);
-        const json = await res?.json().catch(() => null as any);
-        const list = Array.isArray(json?.cursos) ? json.cursos : [];
-        cursos = list.map((c: any) => ({ id: String(c.id), titulo: String(c.titulo ?? "Curso") }));
       }
     }
   }
-  const baseList = [...materialesPlaceholder, ...devMateriales];
-  const listFiltrada = selectedId
-    ? baseList.filter((m) => String(m.curso_id) === selectedId)
-    : baseList;
+
+  // Fetch materials if we have a selected active course
+  let materiales: any[] = [];
+  if (selectedId && estadoCursoSeleccionado === "activo") {
+     try {
+       const { data: fileList, error } = await supabase.storage.from("materiales").list(selectedId, {
+         limit: 100,
+         sortBy: { column: "created_at", order: "desc" }
+       });
+       
+       if (fileList && !error) {
+         materiales = fileList.map(file => {
+            const publicUrl = supabase.storage.from("materiales").getPublicUrl(`${selectedId}/${file.name}`).data.publicUrl;
+            // Try to extract a clean title from "timestamp-name"
+            const nameParts = file.name.split('-');
+            let displayName = file.name;
+            if (nameParts.length > 1 && /^\d+$/.test(nameParts[0])) {
+                displayName = nameParts.slice(1).join('-');
+            }
+            
+            return {
+               id: file.id,
+               curso_id: selectedId,
+               titulo: displayName,
+               curso: activeCourseTitle || "Curso Actual",
+               tipo: file.metadata?.mimetype?.split('/')?.[1]?.toUpperCase() || "ARCHIVO",
+               tamaño: file.metadata?.size ? `${(file.metadata.size / 1024 / 1024).toFixed(2)} MB` : "N/A",
+               fecha: new Date(file.created_at).toLocaleDateString(),
+               descargas: 0,
+               url: publicUrl
+            };
+         });
+       }
+     } catch (e) {
+       console.error("Error fetching materials:", e);
+     }
+  }
+
   return (
     <MainLayout>
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-5xl mx-auto p-4 md:p-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             Materiales de Estudio
@@ -152,7 +156,7 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
             <div className="p-6 space-y-3">
               {cursos.length === 0 ? (
                 <div className="text-sm text-gray-600 dark:text-gray-400">
-                  No hay cursos disponibles por el momento.
+                  No hay cursos disponibles para inscripción en este momento.
                 </div>
               ) : (
                 cursos.map((c) => (
@@ -165,7 +169,6 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
                     <input type="hidden" name="curso_id" value={c.id} />
                     <div>
                       <div className="font-medium text-gray-900 dark:text-white">{c.titulo}</div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">{c.id}</div>
                     </div>
                     <button
                       type="submit"
@@ -203,59 +206,76 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
         ) : (
           <>
             {(hasPending || estadoCursoSeleccionado === "pendiente") && (
-              <div className="rounded-xl border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-4 text-sm text-yellow-800 dark:text-yellow-300 mb-6">
-                Tu solicitud fue enviada. Todas las opciones se habilitarán cuando el admin apruebe tu inicio en el cursado.
+              <div className="rounded-xl border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-4 text-sm text-yellow-800 dark:text-yellow-300 mb-6 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5" />
+                Tu solicitud está pendiente de aprobación.
               </div>
             )}
-            <div className="space-y-4">
-              {listFiltrada.map((material) => (
-                <div
-                  key={material.id}
-                  className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:shadow-lg transition-all"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex gap-4 flex-1">
-                      <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                          {material.titulo}
-                        </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                          {material.curso}
-                        </p>
-                        <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {material.fecha}
-                          </span>
-                          <span>{material.tipo}</span>
-                          <span>{material.tamaño}</span>
-                          <span>{material.descargas} descargas</span>
+            
+            {estadoCursoSeleccionado === "activo" && (
+                <div className="space-y-4">
+                {materiales.length === 0 ? (
+                     <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                         <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                             <FileText className="w-8 h-8 text-gray-400" />
+                         </div>
+                         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No hay materiales aún</h3>
+                         <p className="text-gray-500 dark:text-gray-400 text-sm">El profesor aún no ha cargado contenido para este curso.</p>
+                     </div>
+                ) : (
+                    materiales.map((material) => (
+                        <div
+                        key={material.id}
+                        className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:shadow-lg transition-all"
+                        >
+                        <div className="flex items-start justify-between">
+                            <div className="flex gap-4 flex-1">
+                            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1 break-all">
+                                {material.titulo}
+                                </h3>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                                {material.curso}
+                                </p>
+                                <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                                <span className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    {material.fecha}
+                                </span>
+                                <span>{material.tipo}</span>
+                                <span>{material.tamaño}</span>
+                                </div>
+                            </div>
+                            </div>
+                            <div className="flex gap-2">
+                            <Link
+                                href={material.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-2 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+                                title="Ver online"
+                            >
+                                <Eye className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                            </Link>
+                            <Link
+                                href={`${material.url}?download=1`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-2 rounded-lg transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                                title="Descargar"
+                            >
+                                <Download className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                            </Link>
+                            </div>
                         </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        disabled={estadoCursoSeleccionado === "pendiente"}
-                        className={`p-2 rounded-lg transition-colors ${estadoCursoSeleccionado === "pendiente" ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-gray-700"}`}
-                        title={hasPending ? "Pendiente de aprobación" : "Ver"}
-                      >
-                        <Eye className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                      </button>
-                      <button
-                        disabled={estadoCursoSeleccionado === "pendiente"}
-                        className={`p-2 rounded-lg transition-colors ${estadoCursoSeleccionado === "pendiente" ? "opacity-50 cursor-not-allowed" : "hover:bg-blue-50 dark:hover:bg-blue-900/30"}`}
-                        title={hasPending ? "Pendiente de aprobación" : "Descargar"}
-                      >
-                        <Download className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                      </button>
-                    </div>
-                  </div>
+                        </div>
+                    ))
+                )}
                 </div>
-              ))}
-            </div>
+            )}
           </>
         )}
       </div>
