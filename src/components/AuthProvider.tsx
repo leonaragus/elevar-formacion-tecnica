@@ -7,8 +7,8 @@ import { User, Session, AuthChangeEvent } from "@supabase/supabase-js";
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, userData: any) => Promise<void>;
+  signIn: (email: string) => Promise<void>;
+  signUp: (email: string, userData: any) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -36,17 +36,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+  const signIn = async (email: string) => {
+    const e = String(email || "").trim().toLowerCase();
+    if (!e) throw new Error("Email requerido");
+    const expires = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toUTCString();
+    document.cookie = `student_email=${encodeURIComponent(e)}; path=/; expires=${expires}`;
   };
 
-  const signUp = async (email: string, password: string, userData: any) => {
+  const signUp = async (email: string, userData: any) => {
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase.auth.signUp({
       email,
-      password,
       options: {
         data: userData,
       },
@@ -58,6 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+    document.cookie = `student_email=; path=/; max-age=0`;
   };
 
   return (

@@ -1,5 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { PendientesList } from "./PendientesList";
 import { User, Activity, TrendingUp, Users, BookOpen, DollarSign, AlertTriangle, Database, Settings, LogOut } from "lucide-react";
+import { headers } from "next/headers";
 
 type AdminStats = {
   totalCursos: number;
@@ -25,7 +27,11 @@ export default async function AdminDashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
 
   const token = process.env.ADMIN_TOKEN || "";
-  const res = await fetch(`/api/admin/dashboard`, {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") || h.get("host");
+  const proto = h.get("x-forwarded-proto") || "http";
+  const baseUrl = host ? `${proto}://${host}` : "http://localhost:3000";
+  const res = await fetch(`${baseUrl}/api/admin/dashboard`, {
     headers: { "X-Admin-Token": token },
     cache: "no-store",
   }).catch(() => null as any);
@@ -46,6 +52,26 @@ export default async function AdminDashboardPage() {
   const sistema: SistemaRow[] = Array.isArray(json?.sistema) ? json.sistema : [];
   const recientes: any[] = Array.isArray(json?.recientes) ? json.recientes : [];
   const actividades: any[] = Array.isArray(json?.actividades) ? json.actividades : [];
+  const pendientesRaw: any[] = Array.isArray(json?.pendientes) ? json.pendientes : [];
+
+  const cursosRes = await fetch(`${baseUrl}/api/admin/cursos`, {
+    headers: { "X-Admin-Token": token },
+    cache: "no-store",
+  }).catch(() => null as any);
+  const cursosJson = await cursosRes?.json().catch(() => null as any);
+  const cursos: any[] = Array.isArray(cursosJson?.cursos) ? cursosJson.cursos : [];
+  const cursoTituloById = new Map<string, string>();
+  for (const c of cursos) {
+    const id = String((c as any)?.id ?? "");
+    const titulo = String((c as any)?.titulo ?? "");
+    if (id) cursoTituloById.set(id, titulo);
+  }
+
+  const pendientes: any[] = pendientesRaw.map((p) => {
+    const cursoId = String((p as any)?.curso_id ?? "");
+    const cursoTitulo = cursoId ? (cursoTituloById.get(cursoId) ?? "") : "";
+    return { ...p, curso_titulo: cursoTitulo };
+  });
 
   const sistemaMap = new Map<string, SistemaRow>();
   for (const s of sistema) {
@@ -105,6 +131,35 @@ export default async function AdminDashboardPage() {
             </div>
           </header>
 
+          {pendientes.length > 0 && (
+            <div className="mb-6 rounded-2xl border border-yellow-400/20 bg-yellow-500/10 px-4 py-3">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 text-yellow-300" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-yellow-200">
+                    Hay {pendientes.length} inscripción{pendientes.length === 1 ? "" : "es"} pendiente{pendientes.length === 1 ? "" : "s"} de aprobación
+                  </div>
+                  <div className="mt-0.5 text-xs text-yellow-100/80">
+                    Revisá el curso solicitado antes de aprobar.
+                  </div>
+                  <div className="mt-2 grid gap-1">
+                    {pendientes.slice(0, 3).map((p, idx) => {
+                      const email = String((p as any)?.email ?? (p as any)?.user_id ?? "Usuario");
+                      const cursoId = String((p as any)?.curso_id ?? "");
+                      const cursoTitulo = String((p as any)?.curso_titulo ?? "");
+                      const cursoLabel = cursoTitulo ? `${cursoTitulo} (${cursoId || "sin id"})` : (cursoId || "Curso pendiente");
+                      return (
+                        <div key={idx} className="text-xs text-yellow-100/90 truncate">
+                          {email} — {cursoLabel}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Panel de Estadísticas Principales */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
@@ -146,6 +201,14 @@ export default async function AdminDashboardPage() {
 
           {/* Panel de Actividades Recientes */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+              <h2 className="text-lg font-semibold text-slate-50 mb-4">
+                <AlertTriangle className="w-5 h-5 mr-2 inline text-yellow-400" />
+                Inscripciones Pendientes
+              </h2>
+              
+              <PendientesList pendientes={pendientes} />
+            </section>
             <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
               <h2 className="text-lg font-semibold text-slate-50 mb-4">
                 <Activity className="w-5 h-5 mr-2 inline text-blue-400" />

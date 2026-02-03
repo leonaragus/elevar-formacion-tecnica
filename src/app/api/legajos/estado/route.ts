@@ -4,7 +4,9 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 function isAuthorized(req: NextRequest) {
   const token = req.headers.get("x-admin-token") || req.headers.get("X-Admin-Token");
   const expected = process.env.ADMIN_TOKEN;
-  return token && expected && token === expected;
+  const hasHeaderOk = Boolean(token && expected && token === expected);
+  const hasProfCookie = req.cookies.get("prof_code_ok")?.value === "1";
+  return hasHeaderOk || hasProfCookie;
 }
 
 export async function POST(req: NextRequest) {

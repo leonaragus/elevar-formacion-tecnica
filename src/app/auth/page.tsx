@@ -1,17 +1,24 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
+import Image from "next/image";
 import { useAuth } from "@/components/AuthProvider";
 import { Mail, LogIn, Shield } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+const demoEnabled = process.env.NEXT_PUBLIC_ENABLE_DEMO === "1";
 
-function ModeEffect({ setIsLogin }: { setIsLogin: (v: boolean) => void }) {
+function ModeEffect({ setIsLogin, setError }: { setIsLogin: (v: boolean) => void, setError: (v: string | null) => void }) {
   const searchParams = useSearchParams();
   useEffect(() => {
     const mode = searchParams?.get('mode');
     setIsLogin(mode !== 'register');
-  }, [searchParams, setIsLogin]);
+
+    const error = searchParams?.get('error');
+    if (error === 'pendiente') {
+      setError("Tu solicitud está pendiente de aprobación. Por favor espera a ser contactado por el administrador.");
+    }
+  }, [searchParams, setIsLogin, setError]);
   return null;
 }
 
@@ -22,11 +29,15 @@ export default function AuthPage() {
   const [apellido, setApellido] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
   const router = useRouter();
-  const { signUp } = useAuth();
+  const { signUp, signIn } = useAuth();
   const [profMode, setProfMode] = useState(false);
   const [profCode, setProfCode] = useState("");
   const [profError, setProfError] = useState<string | null>(null);
+  const [adminMode, setAdminMode] = useState(false);
+  const [adminCode, setAdminCode] = useState("");
+  const [adminError, setAdminError] = useState<string | null>(null);
 
   
 
@@ -34,16 +45,53 @@ export default function AuthPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setOk(null);
 
     try {
-      const res = await fetch("/api/demo/access", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const json = await res.json().catch(() => null as any);
-      if (!res.ok || !json?.ok) throw new Error(json?.error || "No se pudo ingresar");
-      router.push("/cursos");
+      if (isLogin) {
+        // Usar el endpoint de API en lugar de la función del cliente
+        const formData = new FormData();
+        formData.append("email", email);
+        
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          body: formData,
+        });
+        
+        const result = await response.json();
+
+        if (!response.ok || !result?.ok) {
+          if (result?.error === "pendiente") {
+            try {
+              if (typeof window !== "undefined") {
+                localStorage.setItem("student_email", String(email || "").trim().toLowerCase());
+                localStorage.setItem("student_ok", "0");
+                localStorage.removeItem("student_course_id");
+              }
+            } catch {}
+            router.replace("/auth?error=pendiente");
+            return;
+          }
+          throw new Error(result?.error || "Error al iniciar sesión");
+        }
+
+        try {
+          if (typeof window !== "undefined") {
+            localStorage.setItem("student_email", String(email || "").trim().toLowerCase());
+            localStorage.setItem("student_ok", result?.student_ok ? "1" : "0");
+            if (result?.student_course_id) {
+              localStorage.setItem("student_course_id", String(result.student_course_id));
+            } else {
+              localStorage.removeItem("student_course_id");
+            }
+          }
+        } catch {}
+
+        router.push(String(result?.redirect || "/cursos"));
+      } else {
+        await signUp(email, { nombre, apellido });
+        setOk("Registro enviado. Revisa tu correo para confirmar la cuenta y espera la aprobación del administrador para comenzar a usar la plataforma.");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -62,26 +110,37 @@ export default function AuthPage() {
       });
       const json = await res.json().catch(() => null as any);
       if (!res.ok || !json?.ok) throw new Error(json?.error || "Código inválido");
-      router.push("/evaluaciones/admin/dashboard");
+      router.push("/admin/dashboard");
     } catch (err) {
       setProfError(err instanceof Error ? err.message : "Error");
+    }
+  };
+  const handleAdminAccess = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminError(null);
+    try {
+      const res = await fetch("/api/profesor/access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: adminCode }),
+      });
+      const json = await res.json().catch(() => null as any);
+      if (!res.ok || !json?.ok) throw new Error(json?.error || "Código inválido");
+      router.push("/admin/dashboard");
+    } catch (err) {
+      setAdminError(err instanceof Error ? err.message : "Error");
     }
   };
 
   return (
     <Suspense fallback={null}>
-    <ModeEffect setIsLogin={setIsLogin} />
+    <ModeEffect setIsLogin={setIsLogin} setError={setError} />
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 dark:from-gray-950 dark:via-gray-900 dark:to-blue-950 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo y header */}
         <div className="text-center mb-8">
           <div className="mb-4 flex justify-center">
-            <img
-              src="/elevar-logo.svg"
-              alt="Elevar Formación Técnica"
-              className="h-20 w-auto"
-              onError={(e) => { (e.currentTarget.style.display = 'none'); }}
-            />
+            <Image src="/elevar-logo.svg" alt="Elevar Formación Técnica" width={160} height={80} />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             {isLogin ? "Acceso alumnos" : "Registro de alumnos"}
@@ -103,6 +162,7 @@ export default function AuthPage() {
                 <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                 <input
                   type="email"
+                  name="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
@@ -112,11 +172,51 @@ export default function AuthPage() {
               </div>
             </div>
 
+            <div>
+              {!isLogin && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Nombre
+                    </label>
+                    <input
+                      type="text"
+                      value={nombre}
+                      onChange={(e) => setNombre(e.target.value)}
+                      className="w-full px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      placeholder="Tu nombre"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Apellido
+                    </label>
+                    <input
+                      type="text"
+                      value={apellido}
+                      onChange={(e) => setApellido(e.target.value)}
+                      className="w-full px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      placeholder="Tu apellido"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            
+
             
 
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
                 <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              </div>
+            )}
+            {ok && (
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+                <p className="text-sm text-green-700 dark:text-green-300">{ok}</p>
               </div>
             )}
 
@@ -130,7 +230,7 @@ export default function AuthPage() {
               ) : (
                 <>
                   <LogIn className="w-5 h-5" />
-                  Ingresar
+                  {isLogin ? "Ingresar" : "Registrarme"}
                 </>
               )}
             </button>
@@ -174,24 +274,60 @@ export default function AuthPage() {
             )}
           </div>
           
-          {/* Acceso demo alumnos */}
-          <div className="mt-4">
+          {/* Acceso admin */}
+          <div className="mt-3">
             <button
               type="button"
-              onClick={async () => {
-                try {
-                  const res = await fetch("/api/demo/access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
-                  const json = await res.json().catch(() => null as any);
-                  if (!res.ok || !json?.ok) throw new Error("No se pudo activar el acceso demo");
-                  router.push("/cursos");
-                } catch (e) {}
-              }}
-              className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-              aria-label="Acceso demo alumnos"
+              onClick={() => setAdminMode(!adminMode)}
+              className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 inline-flex items-center gap-2"
+              aria-expanded={adminMode}
             >
-              Ver Panel Alumno (demo)
+              <Shield className="w-4 h-4" />
+              Acceso admin
             </button>
+            {adminMode && (
+              <form onSubmit={handleAdminAccess} className="mt-3 flex items-center gap-2">
+                <input
+                  type="password"
+                  value={adminCode}
+                  onChange={(e) => setAdminCode(e.target.value)}
+                  placeholder="Código"
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white"
+                  aria-label="Código admin"
+                />
+                <button
+                  type="submit"
+                  className="px-3 py-2 text-sm rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200"
+                >
+                  Entrar
+                </button>
+              </form>
+            )}
+            {adminError && (
+              <div className="mt-2 text-xs text-red-600 dark:text-red-400">{adminError}</div>
+            )}
           </div>
+          
+          {/* Acceso demo alumnos */}
+          {demoEnabled && (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const res = await fetch("/api/demo/access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+                    const json = await res.json().catch(() => null as any);
+                    if (!res.ok || !json?.ok) throw new Error("No se pudo activar el acceso demo");
+                    router.push("/cursos");
+                  } catch (e) {}
+                }}
+                className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                aria-label="Acceso demo alumnos"
+              >
+                Ver Panel Alumno (demo)
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Cursos activos y interés */}
@@ -210,7 +346,7 @@ export default function AuthPage() {
                   try {
                     const res = await fetch("/api/admin/intereses", {
                       method: "POST",
-                      headers: { "Content-Type": "application/json", "X-Admin-Token": process.env.NEXT_PUBLIC_DUMMY ?? "" },
+                      headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ curso_id: "liquidacion-sueldos", email }),
                     });
                     alert("Si estás interesado, el administrativo te pasará contenido y promociones para alumnos.");
@@ -233,7 +369,7 @@ export default function AuthPage() {
                   try {
                     const res = await fetch("/api/admin/intereses", {
                       method: "POST",
-                      headers: { "Content-Type": "application/json", "X-Admin-Token": process.env.NEXT_PUBLIC_DUMMY ?? "" },
+                      headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ curso_id: "gestion-documental", email }),
                     });
                     alert("Si estás interesado, el administrativo te pasará contenido y promociones para alumnos.");
@@ -248,7 +384,7 @@ export default function AuthPage() {
 
         {/* Footer */}
         <div className="mt-8 text-center text-sm text-gray-600 dark:text-gray-400">
-          <p>“Formación que impulsa tu futuro”</p>
+          <p>“Formación que impulsa tu futuro • v2”</p>
           <p className="mt-2">Todos los derechos reservados a Elevar Formación Técnica</p>
         </div>
       </div>

@@ -1,6 +1,8 @@
 import { MainLayout } from "@/components/MainLayout";
 import { FileText, Download, Eye, Calendar } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { devMateriales } from "@/lib/devstore";
+import { cookies } from "next/headers";
 
 const materialesPlaceholder = [
   {
@@ -46,13 +48,25 @@ const materialesPlaceholder = [
 ];
 
 export default async function MaterialesPage({ searchParams }: { searchParams?: { curso_id?: string } }) {
+  const cookieStore = await cookies();
+  const studentOk = cookieStore.get("student_ok")?.value === "1";
+  const studentCourseId = cookieStore.get("student_course_id")?.value;
+
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const selectedId = String(searchParams?.curso_id ?? "");
+  let selectedId = String(searchParams?.curso_id ?? "");
+  const site = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
   let hasActive = false;
   let hasPending = false;
   let cursos: Array<{ id: string; titulo: string }> = [];
   let estadoCursoSeleccionado: "ninguno" | "pendiente" | "activo" = "ninguno";
+
+  if (!user && studentOk && typeof studentCourseId === "string" && studentCourseId) {
+    hasActive = true;
+    selectedId = studentCourseId;
+    estadoCursoSeleccionado = "activo";
+  }
+
   if (user?.id) {
     const { data: insc } = await supabase
       .from("cursos_alumnos")
@@ -62,6 +76,12 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
     const estados = Array.isArray(insc) ? insc.map((r: any) => r.estado) : [];
     hasActive = estados.includes("activo");
     hasPending = estados.includes("pendiente");
+    const activeRow = Array.isArray(insc) ? (insc as any[]).find((r) => r?.estado === "activo" && r?.curso_id != null) : null;
+    const activeCourseId = activeRow?.curso_id != null ? String(activeRow.curso_id) : "";
+    if (hasActive && activeCourseId) {
+      if (!selectedId || selectedId !== activeCourseId) selectedId = activeCourseId;
+      estadoCursoSeleccionado = "activo";
+    }
     if (selectedId) {
       const row = Array.isArray(insc) ? (insc as any[]).find((r) => String(r.curso_id) === selectedId) : null;
       const e = row?.estado;
@@ -69,22 +89,28 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
       if (e === "activo") estadoCursoSeleccionado = "activo";
     }
     if (!hasActive && !hasPending && !selectedId) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("cursos")
         .select("id, titulo")
         .order("orden", { ascending: true })
         .limit(50);
-      cursos = Array.isArray(data)
-        ? (data as any[]).map((c) => ({
-            id: String(c.id),
-            titulo: String(c.titulo ?? "Curso"),
-          }))
-        : [];
+      if (!error && Array.isArray(data) && data.length > 0) {
+        cursos = (data as any[]).map((c) => ({
+          id: String(c.id),
+          titulo: String(c.titulo ?? "Curso"),
+        }));
+      } else {
+        const res = await fetch(`${site}/api/admin/cursos?public=1`, { cache: "no-store", headers: { "x-public": "1" } }).catch(() => null as any);
+        const json = await res?.json().catch(() => null as any);
+        const list = Array.isArray(json?.cursos) ? json.cursos : [];
+        cursos = list.map((c: any) => ({ id: String(c.id), titulo: String(c.titulo ?? "Curso") }));
+      }
     }
   }
+  const baseList = [...materialesPlaceholder, ...devMateriales];
   const listFiltrada = selectedId
-    ? materialesPlaceholder.filter((m) => String(m.curso_id) === selectedId)
-    : materialesPlaceholder;
+    ? baseList.filter((m) => String(m.curso_id) === selectedId)
+    : baseList;
   return (
     <MainLayout>
       <div className="max-w-5xl mx-auto">

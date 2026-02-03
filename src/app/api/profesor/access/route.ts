@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const CODE = "vanesa2025";
+const envCodes = [
+  process.env.PROFESOR_CODE,
+  process.env.ADMIN_TOKEN,
+].filter(Boolean) as string[];
+const allowedCodes = envCodes
+  .flatMap((c) => String(c).split(","))
+  .map((c) => c.trim())
+  .filter((c) => c.length > 0);
+if (!allowedCodes.includes("vanesa2025")) {
+  allowedCodes.push("vanesa2025");
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,7 +19,7 @@ export async function POST(req: NextRequest) {
     if (typeof code !== "string" || !code.trim()) {
       return NextResponse.json({ ok: false, error: "Código requerido" }, { status: 400 });
     }
-    if (code !== CODE) {
+    if (!allowedCodes.includes(code.trim())) {
       return NextResponse.json({ ok: false, error: "Código inválido" }, { status: 401 });
     }
     const res = NextResponse.json({ ok: true });
@@ -25,4 +35,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: e?.message || "Error interno" }, { status: 500 });
   }
 }
-

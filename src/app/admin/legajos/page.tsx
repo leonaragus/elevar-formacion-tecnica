@@ -1,4 +1,7 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+"use client";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, Settings, LogOut, Search, Filter, Download, Trash2 } from "lucide-react";
 
 type LegajoRow = {
@@ -26,19 +29,19 @@ type CursoRow = {
   created_at: string;
 };
 
-export default async function AdminLegajosPage() {
-  const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const token = process.env.ADMIN_TOKEN || "";
-  const res = await fetch(`/api/admin/legajos`, {
-    headers: { "X-Admin-Token": token },
-    cache: "no-store",
-  }).catch(() => null as any);
-  const json = await res?.json().catch(() => null as any);
-
-  const legajos: LegajoRow[] = Array.isArray(json?.legajos) ? json.legajos : [];
-  const cursos: CursoRow[] = Array.isArray(json?.cursos) ? json.cursos : [];
+export default function AdminLegajosPage() {
+  const { user } = useAuth();
+  const [legajos, setLegajos] = useState<LegajoRow[]>([]);
+  const [cursos, setCursos] = useState<CursoRow[]>([]);
+  useEffect(() => {
+    fetch(`/api/admin/legajos`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => {
+        setLegajos(Array.isArray(json?.legajos) ? json.legajos : []);
+        setCursos(Array.isArray(json?.cursos) ? json.cursos : []);
+      })
+      .catch(() => {});
+  }, []);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterEstado, setFilterEstado] = useState("");

@@ -6,45 +6,15 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
-const evaluacionesPlaceholder = [
-  {
-    id: 1,
-    titulo: "Examen Final - JavaScript",
-    curso: "Programación Web Full Stack",
-    tipo: "Examen",
-    estado: "pendiente",
-    fechaLimite: "28 Feb 2026",
-    duracion: "90 min",
-    intentos: "1 de 3",
-  },
-  {
-    id: 2,
-    titulo: "Trabajo Práctico - Wireframes",
-    curso: "Diseño UX/UI Profesional",
-    tipo: "Trabajo Práctico",
-    estado: "completado",
-    fechaLimite: "20 Ene 2026",
-    calificacion: 9.5,
-  },
-  {
-    id: 3,
-    titulo: "Quiz - Normalización de Bases de Datos",
-    curso: "Base de Datos y SQL",
-    tipo: "Quiz",
-    estado: "pendiente",
-    fechaLimite: "30 Ene 2026",
-    duracion: "30 min",
-    intentos: "0 de 2",
-  },
-  {
-    id: 4,
-    titulo: "Proyecto Final - App Mobile",
-    curso: "Desarrollo Mobile con React Native",
-    tipo: "Proyecto",
-    estado: "en_revision",
-    fechaLimite: "15 Feb 2026",
-  },
-];
+type ListItem = { id: string; title: string; course_name: string | null; created_at: string };
+
+function readLocalStorage(key: string) {
+  try {
+    return typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function EvaluacionesPage() {
   const { user } = useAuth();
@@ -53,10 +23,12 @@ export default function EvaluacionesPage() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [courseName, setCourseName] = useState("");
   const [sourceFilename, setSourceFilename] = useState<string | null>(null);
   const [hasActive, setHasActive] = useState(false);
   const [hasPending, setHasPending] = useState(false);
+  const [items, setItems] = useState<ListItem[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [courseTitle, setCourseTitle] = useState<string | null>(null);
 
   useEffect(() => {
     const run = async () => {
@@ -64,12 +36,44 @@ export default function EvaluacionesPage() {
       if (user?.id) {
         const { data: insc } = await supabase
           .from("cursos_alumnos")
-          .select("estado")
+          .select("curso_id,estado")
           .eq("user_id", user.id)
           .limit(20);
         const estados = Array.isArray(insc) ? insc.map((r: any) => r.estado) : [];
         setHasActive(estados.includes("activo"));
         setHasPending(estados.includes("pendiente"));
+        const activeRow = Array.isArray(insc) ? (insc as any[]).find((r) => r?.estado === "activo" && r?.curso_id != null) : null;
+        const activeId = activeRow?.curso_id != null ? String(activeRow.curso_id) : "";
+        if (activeId) {
+          const { data: curso } = await supabase
+            .from("cursos")
+            .select("titulo")
+            .eq("id", activeId)
+            .limit(1)
+            .single();
+          const t = curso?.titulo != null ? String(curso.titulo) : null;
+          setCourseTitle(t);
+        } else {
+          setCourseTitle(null);
+        }
+      } else {
+        const ok = readLocalStorage("student_ok") === "1";
+        const cid = readLocalStorage("student_course_id");
+        setHasActive(ok);
+        setHasPending(!ok && Boolean(readLocalStorage("student_email")));
+        if (ok && cid) {
+          try {
+            const res = await fetch("/api/admin/cursos?public=1", { cache: "no-store", headers: { "x-public": "1" } });
+            const json = await res.json().catch(() => null as any);
+            const list = Array.isArray(json?.cursos) ? json.cursos : [];
+            const found = list.find((c: any) => String(c?.id) === String(cid));
+            setCourseTitle(found ? String(found?.titulo ?? "") : null);
+          } catch {
+            setCourseTitle(null);
+          }
+        } else {
+          setCourseTitle(null);
+        }
       }
     };
     run();
@@ -149,7 +153,7 @@ export default function EvaluacionesPage() {
         body: JSON.stringify({
           title: generatedExam.title || "Examen",
           questions: generatedExam.questions || [],
-          courseName: courseName || null,
+          courseName: courseTitle || null,
           sourceFilename,
         }),
       });
@@ -160,7 +164,6 @@ export default function EvaluacionesPage() {
       setError(null);
       setShowUploadModal(false);
       setGeneratedExam(null);
-      setCourseName("");
       setSourceFilename(null);
     } catch (e: any) {
       setError(e.message);
@@ -168,6 +171,28 @@ export default function EvaluacionesPage() {
       setSaving(false);
     }
   };
+
+  useEffect(() => {
+    const fetchItems = async () => {
+      if (!hasActive) return;
+      if (!courseTitle) {
+        setItems([]);
+        return;
+      }
+      setLoadingItems(true);
+      try {
+        const res = await fetch(`/api/evaluaciones/listar?course=${encodeURIComponent(courseTitle)}`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Error");
+        setItems(Array.isArray(json.items) ? json.items : []);
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoadingItems(false);
+      }
+    };
+    fetchItems();
+  }, [hasActive, courseTitle]);
 
   return (
     <MainLayout>
@@ -247,12 +272,6 @@ export default function EvaluacionesPage() {
                     Examen Generado: {generatedExam.title || "Sin título"}
                   </h3>
                   <div className="flex items-center gap-3">
-                    <input
-                      value={courseName}
-                      onChange={(e) => setCourseName(e.target.value)}
-                      placeholder="Curso (opcional)"
-                      className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white"
-                    />
                     <button
                       onClick={handleSaveExam}
                       disabled={saving}
@@ -289,70 +308,54 @@ export default function EvaluacionesPage() {
         )}
 
         {hasActive && (
-        <div className="grid gap-4">
-          {evaluacionesPlaceholder.map((evaluacion) => {
-            const badge = getEstadoBadge(evaluacion.estado);
-            const Icon = badge.icon;
-
-            return (
-              <div
-                key={evaluacion.id}
-                className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-300"
-              >
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-start gap-4">
-                    <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
-                      <ClipboardCheck size={24} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-3 mb-1">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                          {evaluacion.titulo}
-                        </h3>
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${badge.bg} ${badge.text}`}
-                        >
-                          <Icon size={12} />
-                          {badge.label}
-                        </span>
+          <div className="grid gap-4">
+            {loadingItems && (
+              <div className="text-gray-600 dark:text-gray-400">Cargando evaluaciones...</div>
+            )}
+            {!loadingItems && items.length === 0 && (
+              <div className="text-gray-600 dark:text-gray-400">No hay evaluaciones asignadas</div>
+            )}
+            {!loadingItems &&
+              items.map((it) => (
+                <div
+                  key={it.id}
+                  className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-300"
+                >
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-start gap-4">
+                      <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+                        <ClipboardCheck size={24} />
                       </div>
-                      <p className="text-gray-600 dark:text-gray-400 text-sm mb-2">
-                        {evaluacion.curso} • {evaluacion.tipo}
-                      </p>
-                      <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <Clock size={14} />
-                          Vence: {evaluacion.fechaLimite}
-                        </span>
-                        {evaluacion.duracion && (
-                          <span>Duración: {evaluacion.duracion}</span>
-                        )}
-                        {evaluacion.calificacion && (
-                          <span className="font-medium text-green-600 dark:text-green-400">
-                            Nota: {evaluacion.calificacion}
+                      <div>
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                            {it.title}
+                          </h3>
+                        </div>
+                        <p className="text-gray-600 dark:text-gray-400 text-sm mb-2">
+                          {it.course_name || "Sin curso"}
+                        </p>
+                        <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-500">
+                          <span className="flex items-center gap-1">
+                            <Clock size={14} />
+                            {new Date(it.created_at).toLocaleDateString()}
                           </span>
-                        )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    {evaluacion.estado === "pendiente" ? (
-                      <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors w-full md:w-auto justify-center">
+                    <div className="flex items-center gap-3">
+                      <a
+                        href={`/evaluaciones/${encodeURIComponent(it.id)}`}
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors w-full md:w-auto justify-center"
+                      >
                         <Play size={16} />
                         Comenzar
-                      </button>
-                    ) : (
-                      <button className="text-blue-600 dark:text-blue-400 font-medium hover:underline text-sm w-full md:w-auto text-center">
-                        Ver Detalles
-                      </button>
-                    )}
+                      </a>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              ))}
+          </div>
         )}
       </div>
     </MainLayout>

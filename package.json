@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "description": "Template Next.js 14+ + Supabase (@supabase/ssr)",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint ."
@@ -30,6 +30,7 @@
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.1.5",
     "tailwindcss": "^4.1.18",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vercel": "^50.9.6"
   }
 }

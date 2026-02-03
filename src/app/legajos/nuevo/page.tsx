@@ -1,7 +1,7 @@
 "use client";
-
+export const dynamic = "force-dynamic";
 import { MainLayout } from "@/components/MainLayout";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Save, ShieldCheck, FilePlus, AlertCircle } from "lucide-react";
 
@@ -18,9 +18,9 @@ function validarCUIT(cuit: string) {
   return control === parseInt(cuit[10]);
 }
 
-export default function NuevoLegajoPage() {
+export default function Page() {
   const [hasGD, setHasGD] = useState<boolean | null>(null);
-  useState(() => {
+  useEffect(() => {
     (async () => {
       try {
         const supabase = createSupabaseBrowserClient();
@@ -41,7 +41,7 @@ export default function NuevoLegajoPage() {
         setHasGD(false);
       }
     })();
-  });
+  }, []);
   const [form, setForm] = useState({
     foto_url: "",
     nacionalidad: "Argentino",
@@ -105,7 +105,7 @@ export default function NuevoLegajoPage() {
     try {
       const res = await fetch("/api/legajos", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Admin-Token": process.env.NEXT_PUBLIC_DUMMY ?? "" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form }),
       });
       const json = await res.json().catch(() => null as any);
@@ -127,7 +127,7 @@ export default function NuevoLegajoPage() {
     try {
       const res = await fetch("/api/legajos/seguros", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Admin-Token": process.env.NEXT_PUBLIC_DUMMY ?? "" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cuit_cuil: form.cuit_cuil, ...seguros, poliza_art_id: form.poliza_art_id, poliza_vida_id: form.poliza_vida_id }),
       });
       const json = await res.json().catch(() => null as any);
@@ -147,7 +147,7 @@ export default function NuevoLegajoPage() {
     try {
       const res = await fetch("/api/legajos/validar", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Admin-Token": process.env.NEXT_PUBLIC_DUMMY ?? "" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cuit_cuil: form.cuit_cuil }),
       });
       const json = await res.json().catch(() => null as any);

@@ -108,6 +108,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 
                 <!-- Dashboard Cards -->
@@ -160,8 +161,36 @@
                     </StackPanel>
                 </Border>
                 
-                <!-- Recent Activity -->
+                <!-- Solicitudes Pendientes -->
                 <Border Grid.Row="2" Style="{StaticResource CardStyle}" Margin="0,0,0,30">
+                    <StackPanel>
+                        <TextBlock Text="Solicitudes de Ingreso Pendientes" FontSize="18" FontWeight="Bold" Foreground="#1e293b" Margin="0,0,0,15"/>
+                        <ListView x:Name="PendingList" Margin="0,0,0,10">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,5,0,5">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="2*"/>
+                                            <ColumnDefinition Width="2*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding CursoId}" FontSize="14" Foreground="#1e293b"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding UserId}" FontSize="12" Foreground="#64748b" Margin="10,0,0,0"/>
+                                        <Button Grid.Column="2" Content="Aprobar" Style="{StaticResource ButtonPrimary}" Margin="10,0,0,0" Click="ApprovePending_Click"/>
+                                        <Button Grid.Column="3" Content="Rechazar" Style="{StaticResource ButtonSecondary}" Margin="10,0,0,0" Click="RejectPending_Click"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="Actualizar Pendientes" Style="{StaticResource ButtonSecondary}" Click="RefreshPendings_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Recent Activity -->
+                <Border Grid.Row="3" Style="{StaticResource CardStyle}" Margin="0,0,0,30">
                     <StackPanel>
                         <TextBlock Text="Actividad Reciente" FontSize="18" FontWeight="Bold" Foreground="#1e293b" Margin="0,0,0,15"/>
                         <ListView x:Name="RecentActivityList" Margin="0,0,0,10">
@@ -179,7 +208,7 @@
                 </Border>
                 
                 <!-- System Info -->
-                <Border Grid.Row="3" Style="{StaticResource CardStyle}">
+                <Border Grid.Row="4" Style="{StaticResource CardStyle}">
                     <StackPanel>
                         <TextBlock Text="Información del Sistema" FontSize="18" FontWeight="Bold" Foreground="#1e293b" Margin="0,0,0,15"/>
                         <StackPanel>

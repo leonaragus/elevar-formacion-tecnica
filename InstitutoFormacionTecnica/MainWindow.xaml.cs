@@ -5,6 +5,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using Supabase;
+using System.Net.Http;
+using System.Text.Json;
+using System.Configuration;
 
 namespace InstitutoFormacionTecnica
 {
@@ -15,6 +18,7 @@ namespace InstitutoFormacionTecnica
     {
         private readonly Supabase.Client _supabase;
         public ObservableCollection<ActivityItem> RecentActivities { get; set; }
+        public ObservableCollection<InscripcionPendiente> Pendientes { get; set; }
 
         public MainWindow()
         {
@@ -22,6 +26,8 @@ namespace InstitutoFormacionTecnica
             _supabase = App.Supabase;
             RecentActivities = new ObservableCollection<ActivityItem>();
             RecentActivityList.ItemsSource = RecentActivities;
+            Pendientes = new ObservableCollection<InscripcionPendiente>();
+            PendingList.ItemsSource = Pendientes;
         }
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -30,6 +36,7 @@ namespace InstitutoFormacionTecnica
             {
                 // Cargar datos reales
                 await LoadRealData();
+                await LoadPendientes();
                 
                 // Verificar conexión real
                 await CheckConnection();
@@ -70,6 +77,37 @@ namespace InstitutoFormacionTecnica
             catch (Exception ex)
             {
                 MessageBox.Show($"Error al cargar datos: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task LoadPendientes()
+        {
+            try
+            {
+                var baseUrl = ConfigurationManager.AppSettings["AdminApiBaseUrl"] ?? "http://localhost:3000";
+                var token = ConfigurationManager.AppSettings["AdminToken"] ?? "";
+                Pendientes.Clear();
+                using var http = new HttpClient();
+                http.DefaultRequestHeaders.Add("X-Admin-Token", token);
+                var res = await http.GetAsync($"{baseUrl}/api/admin/inscripciones");
+                var txt = await res.Content.ReadAsStringAsync();
+                var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var json = JsonSerializer.Deserialize<InscripcionesResponse>(txt, opts);
+                if (res.IsSuccessStatusCode && json != null && json.Ok && json.Pendientes != null)
+                {
+                    foreach (var p in json.Pendientes)
+                    {
+                        Pendientes.Add(p);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("No se pudieron cargar las pendientes.", "Información", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error al cargar pendientes: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -116,6 +154,7 @@ namespace InstitutoFormacionTecnica
             await CheckConnection();
             RecentActivities.Clear();
             await LoadRealData();
+            await LoadPendientes();
         }
 
         private void NewCourseButton_Click(object sender, RoutedEventArgs e)
@@ -151,6 +190,73 @@ namespace InstitutoFormacionTecnica
                 RecentActivities.Insert(0, new ActivityItem { Icon = "💰", Description = "Pago registrado recientemente", Time = "Ahora" });
             }
         }
+
+        private async void ApprovePending_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (PendingList.SelectedItem is InscripcionPendiente p)
+                {
+                    var baseUrl = ConfigurationManager.AppSettings["AdminApiBaseUrl"] ?? "http://localhost:3000";
+                    var token = ConfigurationManager.AppSettings["AdminToken"] ?? "";
+                    using var http = new HttpClient();
+                    http.DefaultRequestHeaders.Add("X-Admin-Token", token);
+                    var payload = JsonSerializer.Serialize(new { user_id = p.UserId, curso_id = p.CursoId });
+                    var res = await http.PostAsync($"{baseUrl}/api/admin/inscripciones", new StringContent(payload, System.Text.Encoding.UTF8, "application/json"));
+                    if (res.IsSuccessStatusCode)
+                    {
+                        Pendientes.Remove(p);
+                        MessageBox.Show("Inscripción aprobada.", "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        MessageBox.Show("No se pudo aprobar.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void RejectPending_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (PendingList.SelectedItem is InscripcionPendiente p)
+                {
+                    var baseUrl = ConfigurationManager.AppSettings["AdminApiBaseUrl"] ?? "http://localhost:3000";
+                    var token = ConfigurationManager.AppSettings["AdminToken"] ?? "";
+                    using var http = new HttpClient();
+                    http.DefaultRequestHeaders.Add("X-Admin-Token", token);
+                    var payload = JsonSerializer.Serialize(new { user_id = p.UserId, curso_id = p.CursoId });
+                    var req = new HttpRequestMessage(HttpMethod.Delete, $"{baseUrl}/api/admin/inscripciones")
+                    {
+                        Content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json")
+                    };
+                    var res = await http.SendAsync(req);
+                    if (res.IsSuccessStatusCode)
+                    {
+                        Pendientes.Remove(p);
+                        MessageBox.Show("Inscripción rechazada.", "Información", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        MessageBox.Show("No se pudo rechazar.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void RefreshPendings_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadPendientes();
+        }
     }
 
     public class ActivityItem
@@ -158,5 +264,18 @@ namespace InstitutoFormacionTecnica
         public string Icon { get; set; }
         public string Description { get; set; }
         public string Time { get; set; }
+    }
+
+    public class InscripcionPendiente
+    {
+        public string UserId { get; set; }
+        public string CursoId { get; set; }
+        public string Estado { get; set; }
+    }
+
+    public class InscripcionesResponse
+    {
+        public bool Ok { get; set; }
+        public List<InscripcionPendiente> Pendientes { get; set; }
     }
 }

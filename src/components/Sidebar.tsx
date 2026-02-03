@@ -19,6 +19,14 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
+function readLocalStorage(key: string) {
+  try {
+    return typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+  } catch {
+    return null;
+  }
+}
+
 const menuItems = [
   {
     name: "Cursos",
@@ -55,6 +63,9 @@ const menuItems = [
 export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const pathname = usePathname();
   const [showLegajos, setShowLegajos] = useState(false);
+  const [studentEmail] = useState<string | null>(() => readLocalStorage("student_email"));
+  const [studentOk] = useState(() => readLocalStorage("student_ok") === "1");
+  const [hasActiveEnrollment, setHasActiveEnrollment] = useState<boolean | null>(null);
   useEffect(() => {
     (async () => {
       try {
@@ -63,16 +74,23 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         if (user?.id) {
           const { data: insc } = await supabase
             .from("cursos_alumnos")
-            .select("curso_id, estado")
+            .select("curso_id")
             .eq("user_id", user.id)
-            .eq("curso_id", "gestion-documental")
             .eq("estado", "activo")
-            .limit(1);
-          setShowLegajos(Array.isArray(insc) && insc.length > 0);
+            .limit(50);
+          const rows = Array.isArray(insc) ? insc : [];
+          setHasActiveEnrollment(rows.length > 0);
+          setShowLegajos(rows.some((r: any) => String(r?.curso_id || "") === "gestion-documental"));
+        } else {
+          setHasActiveEnrollment(null);
         }
       } catch {}
     })();
   }, []);
+
+  const restrictedByCookie = Boolean(studentEmail && !studentOk);
+  const restrictedByUser = hasActiveEnrollment === false;
+  const visibleMenuItems = restrictedByCookie || restrictedByUser ? menuItems.slice(0, 1) : menuItems;
 
   return (
     <>
@@ -110,7 +128,7 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
           {/* Navegación */}
           <nav className="flex-1 overflow-y-auto p-4">
             <div className="space-y-1">
-              {menuItems.map((item) => {
+              {visibleMenuItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;
 

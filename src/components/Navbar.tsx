@@ -9,9 +9,32 @@ interface NavbarProps {
   onToggleSidebar?: () => void;
 }
 
+function readLocalStorage(key: string) {
+  try {
+    return typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function Navbar({ onToggleSidebar }: NavbarProps) {
   const [darkMode, setDarkMode] = useState(false);
   const { user, signOut, loading } = useAuth();
+  const [studentOk, setStudentOk] = useState(false);
+
+  useEffect(() => {
+    // Verificar si hay sesión de alumno "aprobado" en localStorage
+    const checkStudent = () => {
+      if (typeof window !== "undefined") {
+        const ok = window.localStorage.getItem("student_ok") === "1";
+        setStudentOk(ok);
+      }
+    };
+    checkStudent();
+    // Escuchar cambios en localStorage si es posible, o simplemente chequear al montar
+    window.addEventListener("storage", checkStudent);
+    return () => window.removeEventListener("storage", checkStudent);
+  }, []);
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
@@ -92,7 +115,7 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
                 <LogOut className="w-5 h-5" />
               </button>
             </div>
-          ) : (
+          ) : studentOk ? null : (
             <div className="flex items-center gap-2">
               <Link
                 href="/auth"

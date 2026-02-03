@@ -5,6 +5,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
 import { Search, PlusCircle, UserSquare2, BadgeCheck, AlertCircle } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 type Legajo = {
   id: string;
@@ -136,7 +137,7 @@ export default function LegajosPage() {
                   <div className="flex items-start gap-4">
                     <div className="w-14 h-14 rounded-lg bg-gray-100 dark:bg-gray-900/40 flex items-center justify-center overflow-hidden">
                       {l.foto_url ? (
-                        <img src={l.foto_url} alt="Foto" className="w-full h-full object-cover" />
+                        <Image src={l.foto_url} alt="Foto" width={56} height={56} className="object-cover w-full h-full" />
                       ) : (
                         <UserSquare2 className="w-7 h-7 text-gray-400" />
                       )}
@@ -164,7 +165,7 @@ export default function LegajosPage() {
                                 setMutatingId(l.id);
                                 const res = await fetch("/api/legajos/estado", {
                                   method: "POST",
-                                  headers: { "Content-Type": "application/json", "X-Admin-Token": process.env.NEXT_PUBLIC_DUMMY ?? "" },
+                                  headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({ cuit_cuil: l.cuit_cuil, estado_id: 2 }),
                                 });
                                 const j = await res.json().catch(() => null as any);
@@ -185,7 +186,7 @@ export default function LegajosPage() {
                                 setMutatingId(l.id);
                                 const res = await fetch("/api/legajos/estado", {
                                   method: "POST",
-                                  headers: { "Content-Type": "application/json", "X-Admin-Token": process.env.NEXT_PUBLIC_DUMMY ?? "" },
+                                  headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({ cuit_cuil: l.cuit_cuil, estado_id: 4 }),
                                 });
                                 const j = await res.json().catch(() => null as any);

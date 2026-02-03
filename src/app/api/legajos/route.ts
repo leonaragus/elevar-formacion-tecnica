@@ -1,14 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-function isAuthorized(req: NextRequest) {
+async function isAuthorized(req: NextRequest) {
   const token = req.headers.get("x-admin-token") || req.headers.get("X-Admin-Token");
   const expected = process.env.ADMIN_TOKEN;
-  return token && expected && token === expected;
+  const hasHeaderOk = Boolean(token && expected && token === expected);
+  const hasProfCookie = req.cookies.get("prof_code_ok")?.value === "1";
+  if (hasHeaderOk || hasProfCookie) return true;
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) return false;
+    const { data } = await supabase
+      .from("cursos_alumnos")
+      .select("curso_id, estado")
+      .eq("user_id", user.id)
+      .eq("curso_id", "gestion-documental")
+      .eq("estado", "activo")
+      .limit(1);
+    return Array.isArray(data) && data.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
   try {

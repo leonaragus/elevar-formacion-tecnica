@@ -8,6 +8,14 @@ import { CreditCard, CheckCircle, AlertTriangle, CalendarDays } from "lucide-rea
 
 type CursoRow = Record<string, unknown>;
 
+function readLocalStorage(key: string) {
+  try {
+    return typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseMeses(curso: CursoRow) {
   const mesesField = (curso as any)?.meses;
   if (typeof mesesField === "number" && mesesField > 0) return mesesField;
@@ -76,30 +84,32 @@ function PagosClient({
   const { user } = useAuth();
   const router = useRouter();
   const search = useSearchParams();
-  const [paidCount, setPaidCount] = useState<number>(0);
-  const [success, setSuccess] = useState<boolean>(false);
-
+  const identity = useMemo(() => {
+    return user?.id || readLocalStorage("student_email") || "";
+  }, [user?.id]);
   const storageKey = useMemo(() => {
-    return user?.id ? `pagos:${user.id}:${cursoId}` : "";
-  }, [user?.id, cursoId]);
-
-  useEffect(() => {
-    const s = search?.get("success");
-    setSuccess(s === "1");
-  }, [search]);
-
-  useEffect(() => {
-    if (!storageKey) return;
+    return identity ? `pagos:${identity}:${cursoId}` : "";
+  }, [identity, cursoId]);
+  const success = useMemo(() => search?.get("success") === "1", [search]);
+  const paidCountFromStorage = useMemo(() => {
+    if (!storageKey) return 0;
     try {
-      const raw = localStorage.getItem(storageKey);
+      const raw = typeof window !== "undefined" ? localStorage.getItem(storageKey) : null;
       const n = raw ? parseInt(raw, 10) : 0;
-      if (!Number.isNaN(n) && n >= 0) setPaidCount(n);
-    } catch {}
+      return !Number.isNaN(n) && n >= 0 ? n : 0;
+    } catch {
+      return 0;
+    }
   }, [storageKey]);
+  const [paidCountOverride, setPaidCountOverride] = useState<number | null>(null);
+  const paidCount = paidCountOverride ?? paidCountFromStorage;
+
+  useEffect(() => {
+  }, []);
 
   const handlePagar = () => {
     const next = Math.min(paidCount + 1, mesesTotal);
-    setPaidCount(next);
+    setPaidCountOverride(next);
     if (storageKey) {
       try {
         localStorage.setItem(storageKey, String(next));
@@ -145,7 +155,9 @@ function PagosClient({
 export default function PagosPage({ searchParams }: { searchParams?: { curso_id?: string } }) {
   const { user } = useAuth();
   const router = useRouter();
-  const [selectedId, setSelectedId] = useState(String(searchParams?.curso_id ?? ""));
+  const [selectedId, setSelectedId] = useState(() => {
+    return String(searchParams?.curso_id ?? "") || readLocalStorage("student_course_id") || "";
+  });
   const [loading, setLoading] = useState(false);
   const [estadoCursoSeleccionado, setEstadoCursoSeleccionado] = useState<"ninguno" | "pendiente" | "activo">("ninguno");
   const [mesesTotal, setMesesTotal] = useState(0);
@@ -156,11 +168,30 @@ export default function PagosPage({ searchParams }: { searchParams?: { curso_id?
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!user?.id) return;
-      
       setLoading(true);
-      
-      // Obtener datos del curso si hay selectedId
+
+      if (!user?.id) {
+        const ok = readLocalStorage("student_ok") === "1";
+        const email = readLocalStorage("student_email");
+        const cid = readLocalStorage("student_course_id");
+        setHasActiveOrPendingAny(ok || Boolean(email));
+        if (!selectedId && cid) setSelectedId(String(cid));
+        if (selectedId || cid) {
+          setEstadoCursoSeleccionado(ok ? "activo" : "pendiente");
+          const targetId = selectedId || String(cid || "");
+          if (targetId) {
+            const res = await fetch("/api/admin/cursos?public=1", { cache: "no-store", headers: { "x-public": "1" } }).catch(() => null as any);
+            const json = await res?.json().catch(() => null as any);
+            const list = Array.isArray(json?.cursos) ? json.cursos : [];
+            const found = list.find((c: any) => String(c?.id) === String(targetId));
+            setCurso(found ?? null);
+            setMesesTotal(parseMeses(found ?? {}));
+          }
+        }
+        setLoading(false);
+        return;
+      }
+
       if (selectedId) {
         const { data: c } = await supabase
           .from("cursos")
@@ -171,7 +202,6 @@ export default function PagosPage({ searchParams }: { searchParams?: { curso_id?
         setCurso(c ?? null);
         setMesesTotal(parseMeses(c ?? {}));
 
-        // Obtener estado de inscripción
         const { data: insc } = await supabase
           .from("cursos_alumnos")
           .select("estado")
@@ -182,25 +212,25 @@ export default function PagosPage({ searchParams }: { searchParams?: { curso_id?
         if (e === "pendiente") setEstadoCursoSeleccionado("pendiente");
         if (e === "activo") setEstadoCursoSeleccionado("activo");
       } else {
-        // Verificar si tiene inscripciones activas/pendientes
         const { data: inscAny } = await supabase
           .from("cursos_alumnos")
-          .select("estado")
+          .select("curso_id,estado")
           .eq("user_id", user.id)
           .limit(10);
-        const estados = Array.isArray(inscAny) ? inscAny.map((r: any) => r.estado) : [];
-        setHasActiveOrPendingAny(estados.includes("activo") || estados.includes("pendiente"));
+        const rows = Array.isArray(inscAny) ? inscAny : [];
+        const estados = rows.map((r: any) => r.estado);
+        const anyActive = estados.includes("activo");
+        const anyPending = estados.includes("pendiente");
+        setHasActiveOrPendingAny(anyActive || anyPending);
+        const activeRow = rows.find((r: any) => r?.estado === "activo" && r?.curso_id != null);
+        const nextId = activeRow?.curso_id != null ? String(activeRow.curso_id) : "";
+        if (nextId) setSelectedId(nextId);
 
-        // Obtener cursos disponibles
-        if (!hasActiveOrPendingAny) {
-          const { data } = await supabase
-            .from("cursos")
-            .select("id, titulo")
-            .order("orden", { ascending: true })
-            .limit(50);
-          setCursos(Array.isArray(data)
-            ? (data as any[]).map((c) => ({ id: String(c.id), titulo: String(c.titulo ?? "Curso") }))
-            : []);
+        if (!anyActive && !anyPending) {
+          const res = await fetch("/api/admin/cursos?public=1", { cache: "no-store", headers: { "x-public": "1" } }).catch(() => null as any);
+          const json = await res?.json().catch(() => null as any);
+          const list = Array.isArray(json?.cursos) ? json.cursos : [];
+          setCursos(list.map((c: any) => ({ id: String(c.id), titulo: String(c.titulo ?? "Curso") })));
         }
       }
       
@@ -284,7 +314,7 @@ export default function PagosPage({ searchParams }: { searchParams?: { curso_id?
             </div>
           </div>
         ) : (
-          <PagosClient cursoId={selectedId} mesesTotal={mesesTotal} estadoCurso={estadoCursoSeleccionado} />
+          <PagosClient key={selectedId} cursoId={selectedId} mesesTotal={mesesTotal} estadoCurso={estadoCursoSeleccionado} />
         )}
       </div>
     </MainLayout>

@@ -33,15 +33,12 @@ export default function AjustesPage() {
         const estados = Array.isArray(insc) ? insc.map((r: any) => r.estado) : [];
         setHasActive(estados.includes("activo"));
         setHasPending(estados.includes("pendiente"));
-        if (!estados.includes("activo") && !estados.includes("pendiente")) {
-          const { data } = await supabase
-            .from("cursos")
-            .select("id, titulo")
-            .order("orden", { ascending: true })
-            .limit(50);
-          const list = Array.isArray(data) ? data.map((c: any) => ({ id: String(c.id), titulo: String(c.titulo ?? "Curso") })) : [];
-          setCursos(list);
-        }
+        const idsInsc = Array.isArray(insc) ? insc.map((r: any) => r.curso_id).filter((id) => id != null) : [];
+        const res = await fetch("/api/admin/cursos?public=1", { cache: "no-store", headers: { "x-public": "1" } }).catch(() => null as any);
+        const json = await res?.json().catch(() => null as any);
+        const list = Array.isArray(json?.cursos) ? json.cursos : [];
+        const base = list.map((c: any) => ({ id: String(c.id), titulo: String(c.titulo ?? "Curso") }));
+        setCursos(base.filter((c: { id: string }) => !idsInsc.includes(c.id)));
       }
     };
     run();
@@ -97,7 +94,7 @@ export default function AjustesPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Columna izquierda - Ajustes */}
           <div className="lg:col-span-2 space-y-6">
-            {!hasActive ? (
+            {!hasPending || cursos.length > 0 ? (
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div className="border-b border-gray-200 dark:border-gray-700 p-6">
                   <div className="flex items-center gap-3">
