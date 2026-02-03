@@ -38,6 +38,7 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
   const [user, setUser] = useState<any>(null);
   const supabase = createSupabaseBrowserClient();
   const demoEnabled = process.env.NEXT_PUBLIC_ENABLE_DEMO === "1";
+  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -92,6 +93,32 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
 
     fetchData();
   }, [supabase]);
+
+  const forceReload = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/inscripciones?t=${Date.now()}`, { cache: "no-store" });
+      const text = await res.text();
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        alert("Respuesta no válida del servidor: " + text.substring(0, 100));
+        return;
+      }
+      
+      alert(`Estado: ${res.status}\nDatos: ${JSON.stringify(json, null, 2)}`);
+      
+      if (json && json.pendientes) {
+        setPendientes(json.pendientes);
+        setDebugInfo(json.debug);
+      }
+    } catch (e: any) {
+      alert("Error de red: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
  
    const [searchTerm, setSearchTerm] = useState("");
    const [filterEstado, setFilterEstado] = useState("");
@@ -559,7 +586,13 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
                <h2 className="text-lg font-semibold text-slate-50 mb-4">
                  <Users className="w-5 h-5 mr-2 inline text-blue-400" />
                  Solicitudes de ingreso pendientes
-              </h2>
+                 <button 
+                   onClick={forceReload}
+                   className="ml-4 text-xs bg-white/10 hover:bg-white/20 px-2 py-1 rounded text-slate-300"
+                 >
+                   🔍 Diagnóstico
+                 </button>
+               </h2>
               {loadError && (
                   <div className="mb-4 p-4 rounded-lg bg-red-900/50 border border-red-500/50 text-red-200 text-sm">
                     {loadError}
