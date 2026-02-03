@@ -2,7 +2,7 @@
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, Settings, LogOut, Search, Filter, Download, Trash2 } from "lucide-react";
+import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, Settings, LogOut, Search, Filter, Download, Trash2, FileText } from "lucide-react";
 
 type LegajoRow = {
   id: string;
@@ -258,12 +258,7 @@ export default function AdminLegajosPage() {
                             <Settings className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm("¿Está seguro que desea eliminar este legajo?")) {
-                                // Lógica para eliminar
-                                console.log("Eliminar:", legajo.id);
-                              }
-                            }}
+                            onClick={() => handleDelete(legajo.id)}
                             className="text-red-400 hover:text-red-300 text-sm">
                             <Trash2 className="w-4 h-4" />
                           </button>
