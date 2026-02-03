@@ -86,6 +86,9 @@ export default async function AdminDashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="bg-emerald-900 text-white text-xs py-1 px-4 text-center font-mono">
+         Dashboard Build: {new Date().toLocaleString("es-AR")}
+      </div>
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col md:flex-row">
         <aside className="border-b border-white/10 bg-slate-950/60 p-4 backdrop-blur md:w-64 md:border-b-0 md:border-r">
           <div className="text-sm font-semibold text-slate-50">Panel de administración</div>
