@@ -27,7 +27,20 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
     const checkStudent = () => {
       if (typeof window !== "undefined") {
         const ok = window.localStorage.getItem("student_ok") === "1";
-        setStudentOk(ok);
+        const email = window.localStorage.getItem("student_email");
+        // Also check cookies as fallback
+        const getCookie = (name: string) => {
+           const value = `; ${document.cookie}`;
+           const parts = value.split(`; ${name}=`);
+           if (parts.length === 2) return parts.pop()?.split(";").shift();
+        };
+        const cookieEmail = getCookie("student_email");
+        
+        if (ok || email || cookieEmail) {
+            setStudentOk(true);
+        } else {
+            setStudentOk(false);
+        }
       }
     };
     checkStudent();
@@ -44,6 +57,14 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
   const handleSignOut = async () => {
     try {
       await signOut();
+      // Also clear local storage if any
+      if (typeof window !== "undefined") {
+          window.localStorage.removeItem("student_email");
+          window.localStorage.removeItem("student_ok");
+          window.localStorage.removeItem("student_course_id");
+          // Force reload to clear state
+          window.location.href = "/";
+      }
     } catch (error) {
       console.error("Error al cerrar sesión:", error);
     }
@@ -94,17 +115,17 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
           {/* Estado de autenticación */}
           {loading ? (
             <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
-          ) : user ? (
+          ) : user || studentOk ? (
             <div className="flex items-center gap-2">
               <Link
-                href="/ajustes"
+                href="/perfil"
                 className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
                   <User className="w-5 h-5 text-white" />
                 </div>
                 <span className="hidden md:block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {user.user_metadata?.nombre || "Usuario"}
+                  {user?.user_metadata?.nombre || "Alumno"}
                 </span>
               </Link>
               <button
@@ -115,7 +136,7 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
                 <LogOut className="w-5 h-5" />
               </button>
             </div>
-          ) : studentOk ? null : (
+          ) : (
             <div className="flex items-center gap-2">
               <Link
                 href="/auth"
