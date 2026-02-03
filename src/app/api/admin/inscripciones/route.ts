@@ -51,21 +51,40 @@ export async function GET(req: NextRequest) {
       }
 
       // También traer de intereses (solicitudes por email)
-      const { data: intereses } = await supabase
+      const { data: intereses, error: errorIntereses } = await supabase
         .from("intereses")
-        .select("email, course_id")
+        .select("*") // Traer todo para evitar errores de selección de columnas
         .limit(100);
       
+      let debugInfo = {
+        interesesCount: intereses?.length || 0,
+        interesesError: errorIntereses?.message || null,
+        cursosAlumnosCount: data?.length || 0,
+        cursosAlumnosError: error?.message || null,
+        hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY
+      };
+
       if (intereses && intereses.length > 0) {
         const mapped = intereses.map((i: any) => ({
           user_id: i.email,
           curso_id: i.course_id || i.curso_id, // handle potential naming variance
-          estado: "pendiente"
+          estado: "pendiente",
+          source: "intereses"
         }));
         combined = [...combined, ...mapped];
       }
 
       if (error && combined.length === 0) {
+        // ... (código existente de fallback) ...
+      }
+      
+      const pend = devInscripciones.filter((i) => i.estado === "pendiente");
+      // Deduplicate by user_id + curso_id
+      const all = [...combined, ...pend];
+      const unique = all.filter((v, i, a) => a.findIndex(t => t.user_id === v.user_id && t.curso_id === v.curso_id) === i);
+      
+      return NextResponse.json({ ok: true, pendientes: unique, debug: debugInfo });
+    } else {
         const msg = String(error.message || "").toLowerCase();
         const shouldFallback =
           msg.includes("invalid api key") ||

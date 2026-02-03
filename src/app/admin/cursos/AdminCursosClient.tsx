@@ -34,6 +34,7 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
    const [pendientes, setPendientes] = useState<{ user_id: string; curso_id: string; estado: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const supabase = createSupabaseBrowserClient();
   const demoEnabled = process.env.NEXT_PUBLIC_ENABLE_DEMO === "1";
@@ -54,6 +55,10 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
         let resPend = await fetch(`/api/admin/inscripciones`, { cache: "no-store" }).catch(() => null as any);
         let jsonPend = await resPend?.json().catch(() => null as any);
         
+        if (jsonPend) {
+          setDebugInfo(jsonPend.debug);
+        }
+
         if (jsonPend && !jsonPend.ok && jsonPend.error) {
            setLoadError(`Error cargando inscripciones: ${jsonPend.error}`);
         }
@@ -556,11 +561,27 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
                  Solicitudes de ingreso pendientes
               </h2>
               {loadError && (
-                 <div className="mb-4 p-4 rounded-lg bg-red-900/50 border border-red-500/50 text-red-200 text-sm">
-                   {loadError}
-                 </div>
-              )}
-              <div className="rounded-xl border border-white/10 bg-white/5">
+                  <div className="mb-4 p-4 rounded-lg bg-red-900/50 border border-red-500/50 text-red-200 text-sm">
+                    {loadError}
+                  </div>
+               )}
+               {debugInfo && (
+                  <div className="mb-4 p-4 rounded-lg bg-blue-900/30 border border-blue-500/30 text-blue-200 text-xs font-mono whitespace-pre-wrap">
+                    DEBUG INFO (Solo Admin):<br/>
+                    - Has Service Key: {debugInfo.hasServiceKey ? "SÍ" : "NO (Crítico)"}<br/>
+                    - Intereses Count: {debugInfo.interesesCount}<br/>
+                    - Intereses Error: {debugInfo.interesesError || "Ninguno"}<br/>
+                    - CursosAlumnos Count: {debugInfo.cursosAlumnosCount}<br/>
+                    - CursosAlumnos Error: {debugInfo.cursosAlumnosError || "Ninguno"}<br/>
+                    {(!debugInfo.hasServiceKey) && (
+                      <span className="text-red-300 font-bold block mt-2">
+                        ⚠️ ATENCIÓN: Falta configurar SUPABASE_SERVICE_ROLE_KEY en Vercel.
+                        Sin esto, el admin no puede ver las solicitudes de inscripción.
+                      </span>
+                    )}
+                  </div>
+               )}
+               <div className="rounded-xl border border-white/10 bg-white/5">
                  {pendientes.length === 0 ? (
                    <div className="p-6 text-sm text-slate-400">No hay solicitudes pendientes.</div>
                  ) : (
