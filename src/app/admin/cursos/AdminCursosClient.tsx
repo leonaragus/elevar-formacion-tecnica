@@ -302,57 +302,24 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
    const niveles = Array.from(new Set(cursos.map(c => c.nivel)));
  
    return (
-     <div className="min-h-screen bg-slate-950 text-slate-100">
-       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col md:flex-row">
-         <aside className="border-b border-white/10 bg-slate-950/60 p-4 backdrop-blur md:w-64 md:border-b-0 md:border-r">
-           <div className="text-sm font-semibold text-slate-50">Panel de administración</div>
-           <div className="mt-1 text-xs text-slate-400">Gestión de cursos</div>
-           <nav className="mt-4 grid gap-1">
-             <a href="/admin/dashboard" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
-               <Activity className="w-4 h-4 mr-2" />
-               Dashboard
-             </a>
-             <a href="/admin/ajustes" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
-               <Settings className="w-4 h-4 mr-2" />
-               Ajustes
-             </a>
-             <a href="/admin/pagos" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
-               <DollarSign className="w-4 h-4 mr-2" />
-               Pagos
-             </a>
-             <a href="/admin/legajos" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
-               <Users className="w-4 h-4 mr-2" />
-               Legajos
-             </a>
-             <a href="/admin/cursos" className="rounded-lg bg-white/5 px-3 py-2 text-sm font-medium text-slate-50">
-              <Database className="w-4 h-4 mr-2" />
-              Cursos
-            </a>
-            <a href="/admin/evaluaciones" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
-              <FileText className="w-4 h-4 mr-2" />
-              Evaluaciones
-            </a>
-          </nav>
-         </aside>
- 
-         <main className="flex-1 p-4 md:p-8">
-           <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-             <div>
-               <h1 className="text-xl font-semibold text-slate-50">
-                 <Database className="w-5 h-5 mr-2 inline text-blue-400" />
-                 Gestión de Cursos
-               </h1>
-               <p className="mt-1 text-sm text-slate-400">
-                 Administración completa de cursos, categorías y matrículas
-               </p>
-             </div>
-             <div className="flex items-center gap-4 text-sm text-slate-300">
-               <User className="w-5 h-5" />
-               {user?.email || "Administrador"}
-             </div>
-           </header>
- 
-           <div className="rounded-2xl border border-white/10 bg-white/5 p-4 mb-6">
+     <div className="p-4 md:p-8">
+       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+         <div>
+           <h1 className="text-xl font-semibold text-slate-50">
+             <Database className="w-5 h-5 mr-2 inline text-blue-400" />
+             Gestión de Cursos
+           </h1>
+           <p className="mt-1 text-sm text-slate-400">
+             Administración completa de cursos, categorías y matrículas
+           </p>
+         </div>
+         <div className="flex items-center gap-4 text-sm text-slate-300">
+           <User className="w-5 h-5" />
+           {user?.email || "Administrador"}
+         </div>
+       </header>
+
+       <div className="rounded-2xl border border-white/10 bg-white/5 p-4 mb-6">
              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                <div className="md:col-span-3">
                  <div className="relative">
@@ -706,9 +673,7 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
                  </div>
                </div>
              )}
-           </div>
-         </main>
-       </div>
-     </div>
-   );
- }
+      </div>
+    </div>
+  );
+}

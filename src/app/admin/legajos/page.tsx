@@ -3,9 +3,10 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, Settings, LogOut, Search, Filter, Download, Trash2, FileText } from "lucide-react";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 
 type LegajoRow = {
-  id: string;
+  // ...id: string;
   alumno_id: string;
   curso_id: string;
   nombre: string;
@@ -88,40 +89,8 @@ export default function AdminLegajosPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col md:flex-row">
-        <aside className="border-b border-white/10 bg-slate-950/60 p-4 backdrop-blur md:w-64 md:border-b-0 md:border-r">
-          <div className="text-sm font-semibold text-slate-50">Panel de administración</div>
-          <div className="mt-1 text-xs text-slate-400">Gestión de legajos</div>
-          <nav className="mt-4 grid gap-1">
-            <a href="/admin/dashboard" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
-              <Activity className="w-4 h-4 mr-2" />
-              Dashboard
-            </a>
-            <a href="/admin/ajustes" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
-              <Settings className="w-4 h-4 mr-2" />
-              Ajustes
-            </a>
-            <a href="/admin/cursos" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
-              <Database className="w-4 h-4 mr-2" />
-              Cursos
-            </a>
-            <a href="/admin/evaluaciones" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
-              <FileText className="w-4 h-4 mr-2" />
-              Evaluaciones
-            </a>
-            <a href="/admin/legajos" className="rounded-lg bg-white/5 px-3 py-2 text-sm font-medium text-slate-50">
-              <Users className="w-4 h-4 mr-2" />
-              Legajos
-            </a>
-            <a href="/admin/cursos" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
-              <Database className="w-4 h-4 mr-2" />
-              Cursos
-            </a>
-          </nav>
-        </aside>
-
-        <main className="flex-1 p-4 md:p-8">
+    <AdminLayout>
+      <div className="p-4 md:p-8">
           <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
             <div>
               <h1 className="text-xl font-semibold text-slate-50">
@@ -308,8 +277,7 @@ export default function AdminLegajosPage() {
               </div>
             )}
           </div>
-        </main>
-      </div>
-    </div>
+        </div>
+    </AdminLayout>
   );
 }
