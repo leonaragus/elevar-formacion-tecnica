@@ -456,7 +456,7 @@ import Link from "next/link";
                    paginatedCursos.map((curso) => (
                      <tr key={curso.id} className="hover:bg-white/10">
                        <td className="px-4 py-3">
-                        <Link href={`/admin/cursos/${curso.id}`} className="block group">
+                          <Link href={`/admin/cursos/${curso.id}`} className="block group" onClick={() => console.log("Navigating to:", curso.id)}>
                           <div className="text-sm font-medium text-slate-50 group-hover:text-blue-400 transition-colors flex items-center gap-2">
                              {curso.titulo}
                              <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
