@@ -6,7 +6,7 @@ import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, S
 import { AdminLayout } from "@/components/admin/AdminLayout";
 
 type LegajoRow = {
-  // ...id: string;
+  id: string;
   alumno_id: string;
   curso_id: string;
   nombre: string;

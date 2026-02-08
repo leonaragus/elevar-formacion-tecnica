@@ -30,6 +30,10 @@ create table if not exists evaluaciones (
   title text not null,
   questions jsonb not null,
   course_name text,
+  -- Campos para evaluaciones por material o unidad
+  tipo_evaluacion text check (tipo_evaluacion in ('general', 'material', 'unidad')),
+  material_id text,
+  unidad text,
   created_at timestamptz not null default now()
 );
 

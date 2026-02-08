@@ -16,7 +16,11 @@ import {
   Plus,
   CheckCircle,
   AlertTriangle,
-  File
+  File,
+  Move,
+  Copy,
+  MoreVertical,
+  Loader
 } from "lucide-react";
 import Link from "next/link";
 
@@ -31,11 +35,20 @@ export function AdminCursoDetailClient({ id }: AdminCursoDetailClientProps) {
   const [course, setCourse] = useState<any>(null);
   const [students, setStudents] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
+  const [glossaries, setGlossaries] = useState<any[]>([]);
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadTitle, setUploadTitle] = useState("");
+  const [lastUploadGlossaryUrl, setLastUploadGlossaryUrl] = useState<string | null>(null);
+  const [lastUploadGlossaryError, setLastUploadGlossaryError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [showMigrateModal, setShowMigrateModal] = useState(false);
+  const [selectedAlumno, setSelectedAlumno] = useState<any>(null);
+  const [targetCursoId, setTargetCursoId] = useState("");
+  const [cursosList, setCursosList] = useState<any[]>([]);
 
   const supabase = createSupabaseBrowserClient();
 
@@ -56,6 +69,27 @@ export function AdminCursoDetailClient({ id }: AdminCursoDetailClientProps) {
       const resMat = await fetch(`/api/admin/materiales?curso_id=${id}`, { cache: "no-store" });
       const jsonMat = await resMat.json();
       setMaterials(jsonMat.items || []);
+
+      // Fetch glossaries directly from Storage (public)
+      try {
+        const { data: files, error } = await supabase.storage.from("materiales").list(`${id}/glosarios`, {
+          limit: 100,
+          sortBy: { column: "created_at", order: "desc" },
+        });
+        if (!error && Array.isArray(files)) {
+          const mapped = files.map((f: any) => {
+            const url = supabase.storage.from("materiales").getPublicUrl(`${id}/glosarios/${f.name}`).data.publicUrl;
+            const title = f.name.replace(/\.md$/i, "").split('-').slice(1).join('-');
+            return { name: f.name, url, title, size: f.metadata?.size, created_at: f.created_at };
+          });
+          setGlossaries(mapped);
+        } else {
+          setGlossaries([]);
+        }
+      } catch (e) {
+        console.error(e);
+        setGlossaries([]);
+      }
 
       const resEval = await fetch(`/api/admin/evaluaciones`, { cache: "no-store" });
       const jsonEval = await resEval.json();
@@ -88,7 +122,15 @@ export function AdminCursoDetailClient({ id }: AdminCursoDetailClientProps) {
       if (res.ok && json?.ok) {
         setUploadFile(null);
         setUploadTitle("");
-        alert("Material subido correctamente");
+        setLastUploadGlossaryUrl(typeof json?.glossary_url === "string" ? json.glossary_url : null);
+        setLastUploadGlossaryError(typeof json?.glossary_error === "string" ? json.glossary_error : null);
+        if (json?.glossary_url) {
+          alert("Material subido correctamente. Glosario generado.");
+        } else if (json?.glossary_error) {
+          alert(`Material subido correctamente. Glosario: ${json.glossary_error}`);
+        } else {
+          alert("Material subido correctamente");
+        }
         fetchData();
       } else {
         const errorMsg = json?.error || res.statusText || "Error desconocido";
@@ -100,6 +142,42 @@ export function AdminCursoDetailClient({ id }: AdminCursoDetailClientProps) {
       alert(`Error de red: ${e.message || "Intente nuevamente"}`);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const deleteMaterial = async (name: string) => {
+    if (!confirm("¿Eliminar este material?")) return;
+    try {
+      const key = name.includes("/") ? name : `${id}/${name}`;
+      const res = await fetch(`/api/admin/materiales?curso_id=${encodeURIComponent(id)}&key=${encodeURIComponent(key)}`, {
+        method: "DELETE",
+      });
+      const json = await res.json().catch(() => null as any);
+      if (!res.ok || !json?.ok) {
+        alert(json?.error || "No se pudo eliminar");
+        return;
+      }
+      setMaterials((prev) => prev.filter((m: any) => String(m?.name || "") !== String(name)));
+    } catch (e: any) {
+      alert(e?.message || "Error");
+    }
+  };
+
+  const deleteGlossary = async (name: string) => {
+    if (!confirm("¿Eliminar este glosario?")) return;
+    try {
+      const key = name.includes("/") ? name : `${id}/glosarios/${name}`;
+      const res = await fetch(`/api/admin/materiales?curso_id=${encodeURIComponent(id)}&key=${encodeURIComponent(key)}&also_delete_glossary=0`, {
+        method: "DELETE",
+      });
+      const json = await res.json().catch(() => null as any);
+      if (!res.ok || !json?.ok) {
+        alert(json?.error || "No se pudo eliminar");
+        return;
+      }
+      setGlossaries((prev) => prev.filter((g: any) => String(g?.name || "") !== String(name)));
+    } catch (e: any) {
+      alert(e?.message || "Error");
     }
   };
 
@@ -298,6 +376,7 @@ export function AdminCursoDetailClient({ id }: AdminCursoDetailClientProps) {
                   <label className="text-xs text-slate-400 mb-1 block">Seleccionar archivo</label>
                   <input 
                     type="file" 
+                    accept="application/pdf,.pdf"
                     onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
                     className="w-full px-3 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-slate-200 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:bg-blue-500 file:text-white hover:file:bg-blue-600"
                   />
@@ -312,6 +391,35 @@ export function AdminCursoDetailClient({ id }: AdminCursoDetailClientProps) {
                   </button>
                 </div>
               </div>
+
+              {(lastUploadGlossaryUrl || lastUploadGlossaryError) && (
+                <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-sm font-medium text-slate-100 mb-2">Glosario generado</div>
+                  {lastUploadGlossaryError && (
+                    <div className="text-xs text-amber-300 mb-2 break-words">{lastUploadGlossaryError}</div>
+                  )}
+                  {lastUploadGlossaryUrl ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        href={`/glosario?url=${encodeURIComponent(lastUploadGlossaryUrl)}`}
+                        className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-lg text-xs"
+                      >
+                        Ver glosario
+                      </Link>
+                      <Link
+                        href={`${lastUploadGlossaryUrl}?download=1`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs"
+                      >
+                        Descargar
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-400">No se generó un archivo de glosario.</div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -321,6 +429,13 @@ export function AdminCursoDetailClient({ id }: AdminCursoDetailClientProps) {
                     <div className="p-2 bg-slate-800 rounded-lg">
                       <File className="w-6 h-6 text-slate-400 group-hover:text-blue-400 transition-colors" />
                     </div>
+                    <button
+                      onClick={() => deleteMaterial(String(mat.name || ""))}
+                      className="p-2 rounded-lg hover:bg-red-500/10 text-slate-400 hover:text-red-300 transition-colors"
+                      title="Eliminar"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                   <h4 className="font-medium text-slate-200 truncate mb-1" title={mat.name}>
                     {mat.name.split('/').pop()}
@@ -339,6 +454,35 @@ export function AdminCursoDetailClient({ id }: AdminCursoDetailClientProps) {
               {materials.length === 0 && (
                 <div className="col-span-full py-12 text-center text-slate-500 border-2 border-dashed border-white/10 rounded-xl">
                   No hay materiales subidos para este curso.
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-slate-50 mb-4 flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Glosarios Generados
+              </h3>
+              {glossaries.length === 0 ? (
+                <div className="text-slate-400 text-sm">Aún no se han generado glosarios.</div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {glossaries.map((g, idx) => (
+                    <div key={idx} className="bg-white/5 border border-white/10 rounded-xl p-4">
+                      <div className="font-medium text-slate-200 mb-2 break-all">{g.title || g.name}</div>
+                      <div className="text-xs text-slate-500 mb-4">{g.size ? `${(g.size/1024).toFixed(1)} KB` : 'Tamaño desc.'}</div>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/glosario?url=${encodeURIComponent(String(g.url || ""))}`} className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-lg text-xs">Ver</Link>
+                        <Link href={`${g.url}?download=1`} target="_blank" rel="noopener noreferrer" className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs">Descargar</Link>
+                        <button
+                          onClick={() => deleteGlossary(String(g.name || ""))}
+                          className="px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-200 rounded-lg text-xs"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

@@ -1,6 +1,6 @@
 "use client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, Settings, LogOut, Search, Filter, Download, Trash2, Plus, Edit, Eye, CheckCircle, Clock, XCircle, Upload, ExternalLink } from "lucide-react";
 import Link from "next/link";
  
@@ -32,61 +32,101 @@ import Link from "next/link";
  export default function AdminCursosClient() {
    const [cursos, setCursos] = useState<CursoRow[]>([]);
    const [alumnos, setAlumnos] = useState<AlumnoRow[]>([]);
-   const [pendientes, setPendientes] = useState<{ user_id: string; curso_id: string; estado: string }[]>([]);
+  const [pendientes, setPendientes] = useState<{
+    user_id: string;
+    curso_id: string;
+    estado: string;
+    user_email?: string | null;
+    curso_titulo?: string | null;
+  }[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
-  const supabase = createSupabaseBrowserClient();
-  const demoEnabled = process.env.NEXT_PUBLIC_ENABLE_DEMO === "1";
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [showDebug, setShowDebug] = useState(false);
+ 
+   const [searchTerm, setSearchTerm] = useState("");
+   const [filterEstado, setFilterEstado] = useState("");
+   const [filterCategoria, setFilterCategoria] = useState("");
+   const [filterNivel, setFilterNivel] = useState("");
+   const [currentPage, setCurrentPage] = useState(1);
+   const [itemsPerPage] = useState(10);
+ 
+   const [showNew, setShowNew] = useState(false);
+   const [newTitulo, setNewTitulo] = useState("");
+   const [newDescripcion, setNewDescripcion] = useState("");
+   const [newDuracion, setNewDuracion] = useState("");
+   const [newModalidad, setNewModalidad] = useState<"presencial" | "virtual" | "semipresencial" | "a distancia">("virtual");
+   const [newCategoria, setNewCategoria] = useState("");
+   const [newNivel, setNewNivel] = useState<"inicial" | "intermedio" | "avanzado" | "especializacion">("inicial");
+  const [newPrecio, setNewPrecio] = useState<number>(0);
+  const [newPrecioText, setNewPrecioText] = useState<string>("0");
+   const [newEstado, setNewEstado] = useState<"activo" | "inactivo" | "en_desarrollo" | "suspendido">("en_desarrollo");
+   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoadError(null);
-        const { data: { user: userData } } = await supabase.auth.getUser();
-        setUser(userData);
 
-        const res = await fetch(`/api/admin/cursos`, { cache: "no-store" }).catch(() => null as any);
-        const json = await res?.json().catch(() => null as any);
+        const authResult = (await Promise.race([
+          supabase.auth.getUser(),
+          new Promise((resolve) =>
+            setTimeout(
+              () => resolve({ data: { user: null }, error: { message: "timeout" } }),
+              5000
+            )
+          ),
+        ])) as any;
+
+        const userData = authResult?.data?.user ?? null;
+        const userError = authResult?.error ?? null;
+        if (!userError || userError?.message === "timeout") {
+          setUser(userData);
+        } else {
+          setUser(null);
+        }
+
+        const controllerCursos = new AbortController();
+        const cursosTimeout = setTimeout(() => controllerCursos.abort(), 15000);
+        const res = await fetch(`/api/admin/cursos`, { cache: "no-store", signal: controllerCursos.signal });
+        clearTimeout(cursosTimeout);
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`Error ${res.status}: ${res.statusText} - ${errorText}`);
+        }
+
+        const json = await res.json();
+        if (!json.ok) {
+          throw new Error(json.error || "Error desconocido en cursos");
+        }
 
         setCursos(Array.isArray(json?.cursos) ? json.cursos : []);
         setAlumnos(Array.isArray(json?.alumnos) ? json.alumnos : []);
-        
-        let resPend = await fetch(`/api/admin/inscripciones`, { cache: "no-store" }).catch(() => null as any);
-        let jsonPend = await resPend?.json().catch(() => null as any);
-        
-        if (jsonPend) {
-          setDebugInfo(jsonPend.debug);
+
+        const controllerPend = new AbortController();
+        const pendTimeout = setTimeout(() => controllerPend.abort(), 15000);
+        const resPend = await fetch(`/api/admin/inscripciones`, { cache: "no-store", signal: controllerPend.signal });
+        clearTimeout(pendTimeout);
+
+        if (!resPend.ok) {
+          setPendientes([]);
+          return;
         }
 
-        if (jsonPend && !jsonPend.ok && jsonPend.error) {
-           setLoadError(`Error cargando inscripciones: ${jsonPend.error}`);
-        }
-
-        if (resPend && resPend.status === 401 && demoEnabled) {
-          try {
-            await fetch("/api/profesor/access", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ code: "vanesa2025" }),
-            });
-            const resCursos = await fetch(`/api/admin/cursos`, { cache: "no-store" }).catch(() => null as any);
-            const jsonCursos = await resCursos?.json().catch(() => null as any);
-            setCursos(Array.isArray(jsonCursos?.cursos) ? jsonCursos.cursos : []);
-            setAlumnos(Array.isArray(jsonCursos?.alumnos) ? jsonCursos.alumnos : []);
-            resPend = await fetch(`/api/admin/inscripciones`, { cache: "no-store" }).catch(() => null as any);
-            jsonPend = await resPend?.json().catch(() => null as any);
-            if (jsonPend && !jsonPend.ok && jsonPend.error) {
-               setLoadError(`Error cargando inscripciones: ${jsonPend.error}`);
-            }
-          } catch {}
+        const jsonPend = await resPend.json().catch(() => null as any);
+        if (jsonPend) setDebugInfo(jsonPend.debug);
+        if (jsonPend && jsonPend.ok === false && jsonPend.error) {
+          setLoadError(`Advertencia: ${jsonPend.error}`);
+          setPendientes(Array.isArray(jsonPend?.pendientes) ? jsonPend.pendientes : []);
+          return;
         }
         setPendientes(Array.isArray(jsonPend?.pendientes) ? jsonPend.pendientes : []);
       } catch (error: any) {
-        console.error("Error fetching data:", error);
-        setLoadError(error?.message || "Error desconocido");
+        setLoadError(`Error al cargar datos: ${error?.message || "Error desconocido"}`);
       } finally {
         setLoading(false);
       }
@@ -104,54 +144,126 @@ import Link from "next/link";
       try {
         json = JSON.parse(text);
       } catch {
-        alert("Respuesta no válida del servidor: " + text.substring(0, 100));
+        alert("Respuesta no válida del servidor: " + text.substring(0, 200));
         return;
       }
-      
+
       alert(`Estado: ${res.status}\nDatos: ${JSON.stringify(json, null, 2)}`);
-      
+
       if (json && json.pendientes) {
         setPendientes(json.pendientes);
         setDebugInfo(json.debug);
       }
     } catch (e: any) {
-      alert("Error de red: " + e.message);
+      alert("Error de red: " + (e?.message || "Error"));
     } finally {
       setLoading(false);
     }
   };
- 
-   const [searchTerm, setSearchTerm] = useState("");
-   const [filterEstado, setFilterEstado] = useState("");
-   const [filterCategoria, setFilterCategoria] = useState("");
-   const [filterNivel, setFilterNivel] = useState("");
-   const [currentPage, setCurrentPage] = useState(1);
-   const [itemsPerPage] = useState(10);
- 
-   const [showNew, setShowNew] = useState(false);
-   const [newTitulo, setNewTitulo] = useState("");
-   const [newDescripcion, setNewDescripcion] = useState("");
-   const [newDuracion, setNewDuracion] = useState("");
-   const [newModalidad, setNewModalidad] = useState<"presencial" | "virtual" | "semipresencial" | "a distancia">("virtual");
-   const [newCategoria, setNewCategoria] = useState("");
-   const [newNivel, setNewNivel] = useState<"inicial" | "intermedio" | "avanzado" | "especializacion">("inicial");
-   const [newPrecio, setNewPrecio] = useState<number>(0);
-   const [newEstado, setNewEstado] = useState<"activo" | "inactivo" | "en_desarrollo" | "suspendido">("en_desarrollo");
-   const [saving, setSaving] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+
+  if (loading) {
+    return (
+      <div className="p-4 md:p-8">
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+          <div>
+            <h1 className="text-xl font-semibold text-slate-50">
+              <Database className="w-5 h-5 mr-2 inline text-blue-400" />
+              Gestión de Cursos
+            </h1>
+            <p className="mt-1 text-sm text-slate-400">
+              Administración completa de cursos, categorías y matrículas
+            </p>
+          </div>
+          <div className="flex items-center gap-4 text-sm text-slate-300">
+            <User className="w-5 h-5" />
+            Cargando...
+          </div>
+        </header>
+
+        <div className="flex items-center justify-center py-12">
+          <div className="flex items-center gap-3 text-slate-400">
+            <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+            Cargando cursos...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-4 md:p-8">
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+          <div>
+            <h1 className="text-xl font-semibold text-slate-50">
+              <Database className="w-5 h-5 mr-2 inline text-blue-400" />
+              Gestión de Cursos
+            </h1>
+            <p className="mt-1 text-sm text-slate-400">
+              Administración completa de cursos, categorías y matrículas
+            </p>
+          </div>
+          <div className="flex items-center gap-4 text-sm text-slate-300">
+            <User className="w-5 h-5" />
+            {user?.email || "Administrador"}
+          </div>
+        </header>
+
+        <div className="rounded-2xl border border-red-400/20 bg-red-500/10 p-6 text-red-200">
+          <div className="flex items-center gap-3 mb-2">
+            <AlertTriangle className="w-5 h-5" />
+            <h3 className="font-semibold">Error al cargar los cursos</h3>
+          </div>
+          <p className="text-sm mb-4">{loadError}</p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
+            >
+              Recargar página
+            </button>
+            <button
+              onClick={forceReload}
+              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium"
+            >
+              Debug
+            </button>
+            <button
+              onClick={() => setShowDebug(!showDebug)}
+              className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg text-sm font-medium"
+            >
+              {showDebug ? "Ocultar" : "Mostrar"} debug
+            </button>
+          </div>
+          {showDebug && debugInfo && (
+            <div className="mt-4 p-3 bg-black/20 rounded border border-white/10 text-xs font-mono text-slate-300">
+              <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const saveNewCourse = async () => {
      try {
        setSaving(true);
        const method = editingId ? "PUT" : "POST";
-       const body: any = {
+        // Parse precio desde texto permitiendo puntos y comas
+        const raw = newPrecioText.trim();
+        const normalized = raw
+           .replace(/\./g, "") // miles
+           .replace(/,/g, "."); // decimales estilo es-AR
+        const precioNum = Number(normalized);
+        const precioFinal = Number.isFinite(precioNum) ? Math.max(0, precioNum) : 0;
+        const body: any = {
            titulo: newTitulo,
            descripcion: newDescripcion,
            duracion: newDuracion,
            modalidad: newModalidad,
            categoria: newCategoria,
            nivel: newNivel,
-           precio: newPrecio,
+            precio: precioFinal,
            estado: newEstado,
        };
        if (editingId) body.id = editingId;
@@ -172,7 +284,8 @@ import Link from "next/link";
        setNewDescripcion("");
        setNewDuracion("");
        setNewCategoria("");
-       setNewPrecio(0);
+      setNewPrecio(0);
+      setNewPrecioText("0");
        // Refresh
        setLoading(true);
        const res2 = await fetch(`/api/admin/cursos`, { cache: "no-store" }).catch(() => null as any);
@@ -196,6 +309,7 @@ import Link from "next/link";
       setNewCategoria(curso.categoria);
       setNewNivel(curso.nivel as any);
       setNewPrecio(curso.precio);
+      setNewPrecioText(curso.precio != null ? curso.precio.toLocaleString('es-AR') : "0");
       setNewEstado(curso.estado as any);
       setShowNew(true);
    };
@@ -287,6 +401,22 @@ import Link from "next/link";
          <div className="flex items-center gap-4 text-sm text-slate-300">
            <User className="w-5 h-5" />
            {user?.email || "Administrador"}
+         </div>
+         <div className="flex gap-2">
+           <button
+             onClick={forceReload}
+             className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+           >
+             <Database className="w-4 h-4" />
+             Debug
+           </button>
+           <button
+             onClick={() => setShowNew(true)}
+             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+           >
+             <Plus className="w-4 h-4" />
+             Nuevo Curso
+           </button>
          </div>
        </header>
 
@@ -407,10 +537,34 @@ import Link from "next/link";
                        <option value="especializacion">Especialización</option>
                      </select>
                    </div>
-                   <div>
-                     <label className="text-xs text-slate-400">Precio (ARS)</label>
-                     <input type="number" value={newPrecio} onChange={(e) => setNewPrecio(Number(e.target.value))} className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100" />
-                   </div>
+                  <div>
+                    <label className="text-xs text-slate-400">Precio (ARS)</label>
+                    <input
+                      inputMode="decimal"
+                      value={newPrecioText}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        // Permitir dígitos, puntos y comas
+                        if (/^[0-9.,]*$/.test(v)) {
+                          setNewPrecioText(v);
+                        }
+                      }}
+                      onBlur={() => {
+                        // Formatear en es-AR al salir
+                        const normalized = newPrecioText.replace(/\./g, "").replace(/,/g, ".");
+                        const num = Number(normalized);
+                        if (Number.isFinite(num)) {
+                          setNewPrecio(num);
+                          setNewPrecioText(num.toLocaleString('es-AR'));
+                        } else {
+                          setNewPrecio(0);
+                          setNewPrecioText("0");
+                        }
+                      }}
+                      placeholder="Ej: 120.000"
+                      className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100"
+                    />
+                  </div>
                    <div>
                      <label className="text-xs text-slate-400">Estado</label>
                      <select value={newEstado} onChange={(e) => setNewEstado(e.target.value as any)} className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100">
@@ -474,7 +628,7 @@ import Link from "next/link";
                          <div className="text-sm text-slate-50 capitalize">{curso.modalidad}</div>
                        </td>
                        <td className="px-4 py-3 text-center">
-                         <div className="text-sm font-medium text-emerald-400">${curso.precio.toLocaleString()}</div>
+                         <div className="text-sm font-medium text-emerald-400">$ {curso.precio.toLocaleString('es-AR')}</div>
                        </td>
                        <td className="px-4 py-3 text-center">
                          <span className={`px-2 py-1 rounded-full text-xs ${
@@ -572,7 +726,8 @@ import Link from "next/link";
                      {pendientes.map((p) => (
                        <div key={`${p.user_id}:${p.curso_id}`} className="p-4 flex items-center justify-between">
                          <div className="text-sm text-slate-200">
-                           Usuario: <span className="font-mono">{p.user_id}</span> • Curso: <span className="font-mono">{p.curso_id}</span>
+                           <div>Email: <span className="font-mono">{p.user_email || p.user_id}</span></div>
+                           <div>Curso: <span className="font-medium">{p.curso_titulo || p.curso_id}</span></div>
                          </div>
                          <div className="flex items-center gap-2">
                            <button onClick={() => approvePending(p.user_id, p.curso_id)} className="px-3 py-1 rounded bg-green-600 hover:bg-green-700 text-white text-xs">

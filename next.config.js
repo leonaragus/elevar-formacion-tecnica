@@ -1,17 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'rgmauuzwzsoaytsulgwg.supabase.co',
-        pathname: '/storage/**',
-      },
-    ],
-  },
+  serverExternalPackages: ["@napi-rs/canvas", "pdf-parse", "pdfjs-dist"],
 };
 
 module.exports = nextConfig;

@@ -3,8 +3,10 @@ import { BookOpen } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import CursoCard from "@/components/CursoCard";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { devInscripciones, devCursos } from "@/lib/devstore";
+
+export const dynamic = "force-dynamic";
 
 type CursoRow = {
   id: string;
@@ -27,17 +29,27 @@ function getCursoProfessor(curso: CursoRow) {
 }
 
 export default async function CursosPage({ searchParams }: { searchParams?: Promise<{ solicitud?: string; error?: string }> }) {
-  const cookieStore = await cookies();
-  const studentEmail = cookieStore.get("student_email")?.value;
-  const studentOk = cookieStore.get("student_ok")?.value === "1";
-  const studentCourseId = cookieStore.get("student_course_id")?.value;
+  const resolvedSearchParams = await searchParams;
+  let studentEmail: string | undefined;
+  let studentOk = false;
+  let studentCourseId: string | undefined;
+  try {
+    const cookieStore = await cookies();
+    studentEmail = cookieStore.get("student_email")?.value;
+    studentOk = cookieStore.get("student_ok")?.value === "1";
+    studentCourseId = cookieStore.get("student_course_id")?.value;
+  } catch {}
 
-  const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  let supabase: any = null;
+  let user: any = null;
+  try {
+    supabase = await createSupabaseServerClient();
+    const { data } = await supabase.auth.getUser();
+    user = data?.user ?? null;
+  } catch {}
 
-  const params = await searchParams;
-  const solicitud = String(params?.solicitud ?? "");
-  const errorMsg = String(params?.error ?? "");
+  const solicitud = String(resolvedSearchParams?.solicitud ?? "");
+  const errorMsg = String(resolvedSearchParams?.error ?? "");
 
   let cursos: CursoRow[] = [];
   let hasActive = false;
@@ -47,23 +59,28 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
   let activeCourseIds: string[] = [];
   let pendingCourseIds: string[] = [];
   let enrolledIds: string[] = [];
+  let activeCourseTitle: string = "";
 
   // 1. Resolve enrollment via Cookie or DB (if no User)
   if (!user) {
     // Try to resolve via email if present
     if (studentEmail) {
-      const adminClient = createSupabaseAdminClient();
+      let adminClient: any = null;
+      try { adminClient = createSupabaseAdminClient(); } catch { adminClient = null; }
       
-      // Check pending requests
-      const { data: intereses } = await adminClient
-        .from("intereses")
-        .select("course_id")
-        .eq("email", studentEmail);
-      
-      if (intereses && intereses.length > 0) {
-        hasPending = true;
-        pendingCourseIds = intereses.map((i: any) => i.course_id).filter((id: any) => id != null).map((id: any) => String(id));
-      }
+      // Check pending requests (tolerante a fallos)
+      try {
+        if (adminClient) {
+          const { data: intereses } = await adminClient
+            .from("intereses")
+            .select("course_id")
+            .eq("email", studentEmail);
+          if (intereses && intereses.length > 0) {
+            hasPending = true;
+            pendingCourseIds = intereses.map((i: any) => i.course_id).filter((id: any) => id != null).map((id: any) => String(id));
+          }
+        }
+      } catch {}
 
       let foundUserId: string | null = null;
       try {
@@ -75,21 +92,22 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
         foundUserId = null;
       }
 
-      if (foundUserId) {
-        const { data: insc } = await adminClient
-          .from("cursos_alumnos")
-          .select("curso_id, estado")
-          .eq("user_id", foundUserId);
-
-        if (Array.isArray(insc)) {
-          const rows = insc.filter((r: any) => r?.curso_id != null);
-          activeCourseIds = rows.filter((r: any) => r?.estado === "activo").map((r: any) => String(r.curso_id));
-          const pendingFromInsc = rows.filter((r: any) => r?.estado === "pendiente").map((r: any) => String(r.curso_id));
-          hasActive = activeCourseIds.length > 0;
-          hasPending = hasPending || pendingFromInsc.length > 0;
-          pendingCourseIds = [...new Set([...pendingCourseIds, ...pendingFromInsc])];
-          enrolledIds = [...new Set([...activeCourseIds, ...pendingCourseIds])];
-        }
+      if (foundUserId && adminClient) {
+        try {
+          const { data: insc } = await adminClient
+            .from("cursos_alumnos")
+            .select("curso_id, estado")
+            .eq("user_id", foundUserId);
+          if (Array.isArray(insc)) {
+            const rows = insc.filter((r: any) => r?.curso_id != null);
+            activeCourseIds = rows.filter((r: any) => r?.estado === "activo").map((r: any) => String(r.curso_id));
+            const pendingFromInsc = rows.filter((r: any) => r?.estado === "pendiente").map((r: any) => String(r.curso_id));
+            hasActive = activeCourseIds.length > 0;
+            hasPending = hasPending || pendingFromInsc.length > 0;
+            pendingCourseIds = [...new Set([...pendingCourseIds, ...pendingFromInsc])];
+            enrolledIds = [...new Set([...activeCourseIds, ...pendingCourseIds])];
+          }
+        } catch {}
       } else {
         const rows = devInscripciones.filter((i) => i.user_id === studentEmail);
         activeCourseIds = rows.filter((r) => r.estado === "activo").map((r) => r.curso_id);
@@ -115,22 +133,28 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
   }
 
   // 2. Resolve enrollment via User (Supabase Auth)
-  if (user?.id) {
-    const { data: insc } = await supabase
-      .from("cursos_alumnos")
-      .select("curso_id, estado")
-      .eq("user_id", user.id)
-      .limit(100);
+  if (user?.id && supabase) {
+    let insc: any[] = [];
+    try {
+      const { data } = await supabase
+        .from("cursos_alumnos")
+        .select("curso_id, estado")
+        .eq("user_id", user.id)
+        .limit(100);
+      insc = Array.isArray(data) ? data : [];
+    } catch {}
     
     // Also check by email, as some records might have been created with email before user had a UUID
     let inscEmail: any[] = [];
     if (user.email) {
-       const { data } = await supabase
-          .from("cursos_alumnos")
-          .select("curso_id, estado")
-          .eq("user_id", user.email)
-          .limit(100);
-       if (data) inscEmail = data;
+       try {
+         const { data } = await supabase
+            .from("cursos_alumnos")
+            .select("curso_id, estado")
+            .eq("user_id", user.email)
+            .limit(100);
+         if (data) inscEmail = data;
+       } catch {}
     }
 
     const allInsc = [...(Array.isArray(insc) ? insc : []), ...inscEmail];
@@ -210,6 +234,20 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
 
   const cursosActivos = cursos.filter((c) => activeCourseIds.includes(String(c.id)));
   const cursosPendientes = cursos.filter((c) => pendingCourseIds.includes(String(c.id)) && !activeCourseIds.includes(String(c.id)));
+  if (!activeCourseTitle && cursosActivos.length > 0) {
+    activeCourseTitle = String(cursosActivos[0]?.titulo || "");
+  }
+  if (!activeCourseTitle && activeCourseIds.length > 0) {
+    try {
+      const adminClient2 = createSupabaseAdminClient();
+      const { data: row } = await adminClient2
+        .from("cursos")
+        .select("titulo")
+        .eq("id", activeCourseIds[0])
+        .single();
+      if (row?.titulo) activeCourseTitle = String(row.titulo);
+    } catch {}
+  }
 
   // Safety check: Si el sistema creía que había activos (hasActive=true) pero no se encontró ninguno válido (cursosActivos.length=0),
   // entonces asumimos que hubo un error de sincronización (cookie vieja, id inválido) y permitimos ver disponibles de nuevo.
@@ -220,6 +258,36 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
        // No cambiamos hasActive a false variable directamente porque se usa en render, pero re-llenamos disponibles
        disponibles = baseDisponibles.filter((c) => !enrolledIds.includes(c.id));
     }
+  }
+
+  // Admin messages (global or targeted to active course)
+  let mensajes: Array<{ titulo: string; contenido: string; created_at: string }> = [];
+  try {
+    const adminClient = createSupabaseAdminClient();
+    let query = adminClient
+      .from("mensajes")
+      .select("titulo, contenido, created_at, curso_id")
+      .order("created_at", { ascending: false })
+      .limit(30);
+    
+    // Filter: messages with no curso_id (global) OR messages for active courses
+    if (activeCourseIds.length > 0) {
+        query = query.or(`curso_id.is.null,curso_id.in.(${activeCourseIds.join(",")})`);
+    } else {
+        query = query.is("curso_id", null);
+    }
+
+    const { data } = await query;
+    
+    if (data) {
+      mensajes = data.map((m: any) => ({
+           titulo: String(m.titulo || ""),
+           contenido: String(m.contenido || ""),
+           created_at: String(m.created_at || "")
+      }));
+    }
+  } catch (e) {
+    console.error("Error fetching messages:", e);
   }
 
   return (
@@ -238,9 +306,7 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
           </div>
         )}
 
-        <div className="mb-4 p-2 text-xs text-gray-400 bg-gray-900/10 rounded font-mono">
-           Debug: {user?.email || "No User"} | Active: {activeCourseIds.length} | Pending: {pendingCourseIds.length} | Enrolled: {enrolledIds.join(",")}
-        </div>
+        {/* Debug oculto para producción */}
 
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
           <div>
@@ -257,6 +323,54 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
           </div>
         </div>
 
+        {/* Mensajes del Administrador (solo del curso activo) */}
+        <div className="mb-10">
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">Mensajes del Administrador</h2>
+          {mensajes.length === 0 ? (
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 p-6 text-sm text-gray-600 dark:text-gray-400 shadow-sm">
+              No hay mensajes para tu curso.
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {mensajes.map((m, idx) => {
+                const isLatest = idx === 0;
+                return (
+                  <article 
+                    key={idx} 
+                    className={`rounded-2xl overflow-hidden border shadow-sm transition-all ${
+                      isLatest 
+                        ? "border-blue-500/50 bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900 ring-1 ring-blue-500/20" 
+                        : "border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 opacity-70 hover:opacity-100"
+                    }`}
+                  >
+                    <div className={`px-6 py-4 border-b text-center ${
+                      isLatest 
+                        ? "bg-blue-600/10 dark:bg-blue-600/20 border-blue-500/20" 
+                        : "bg-gray-50/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-800"
+                    }`}>
+                      <h3 className={`text-xl font-bold mb-1 ${
+                        isLatest 
+                          ? "text-blue-700 dark:text-blue-400" 
+                          : "text-gray-900 dark:text-gray-100"
+                      }`}>
+                        {m.titulo}
+                      </h3>
+                      <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        {new Date(m.created_at).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className={`px-6 py-6 text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap ${
+                      isLatest ? "text-lg" : "text-base"
+                    }`}>
+                      {m.contenido}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {cursosActivos.length > 0 && (
           <div className="mb-12">
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
@@ -269,6 +383,7 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
                   curso={curso}
                   professor={getCursoProfessor(curso)}
                   estadoCurso="activo"
+                  isAdminView={false}
                 />
               ))}
             </div>
@@ -287,6 +402,7 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
                   curso={curso}
                   professor={getCursoProfessor(curso)}
                   estadoCurso="pendiente"
+                  isAdminView={false}
                 />
               ))}
             </div>
@@ -305,6 +421,7 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
                   curso={curso as CursoRow}
                   professor="Profesor"
                   estadoCurso="ninguno"
+                  isAdminView={false}
                 />
               ))}
             </div>

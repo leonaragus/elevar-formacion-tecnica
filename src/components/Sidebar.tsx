@@ -66,6 +66,8 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const [studentEmail] = useState<string | null>(() => readLocalStorage("student_email"));
   const [studentOk] = useState(() => readLocalStorage("student_ok") === "1");
   const [hasActiveEnrollment, setHasActiveEnrollment] = useState<boolean | null>(null);
+  const [materialesCount, setMaterialesCount] = useState<number | null>(null);
+  const [materialesNewCount, setMaterialesNewCount] = useState<number>(0);
   useEffect(() => {
     (async () => {
       try {
@@ -87,6 +89,25 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       } catch {}
     })();
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/alumno/materiales-count", { cache: "no-store" });
+        const json = await res.json().catch(() => null as any);
+        if (res.ok && json?.ok) {
+          setMaterialesCount(typeof json.count === "number" ? json.count : 0);
+          setMaterialesNewCount(typeof json.newCount === "number" ? json.newCount : 0);
+        } else {
+          setMaterialesCount(0);
+          setMaterialesNewCount(0);
+        }
+      } catch {
+        setMaterialesCount(0);
+        setMaterialesNewCount(0);
+      }
+    })();
+  }, [pathname]);
 
   const restrictedByCookie = Boolean(studentEmail && !studentOk);
   const restrictedByUser = hasActiveEnrollment === false;
@@ -131,6 +152,7 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
               {visibleMenuItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;
+                const isMateriales = item.href === "/materiales";
 
                 return (
                   <Link
@@ -153,6 +175,30 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                         {item.description}
                       </div>
                     </div>
+                    {isMateriales && typeof materialesCount === "number" && (
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                            materialesNewCount > 0
+                              ? "bg-emerald-600 text-white"
+                              : "bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                          }`}
+                          title="Nuevos"
+                        >
+                          +{materialesNewCount}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                            materialesCount > 0
+                              ? "bg-blue-600/10 text-blue-700 border border-blue-600/30 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-500/30"
+                              : "bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                          }`}
+                          title="Total"
+                        >
+                          {materialesCount}
+                        </span>
+                      </div>
+                    )}
                   </Link>
                 );
               })}

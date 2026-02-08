@@ -9,7 +9,8 @@ import {
   Users, 
   DollarSign, 
   Settings,
-  X
+  X,
+  LogOut
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -29,6 +30,12 @@ const menuItems = [
     href: "/admin/cursos",
     icon: Database,
     description: "Gestión de cursos"
+  },
+  {
+    name: "Mensajes",
+    href: "/admin/mensajes",
+    icon: FileText,
+    description: "Comunicación alumnos"
   },
   {
     name: "Evaluaciones",
@@ -138,11 +145,23 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
 
           {/* Footer del sidebar */}
           <div className="p-4 border-t border-white/10">
-            <div className="bg-white/5 rounded-lg p-3">
-              <p className="text-xs text-slate-400">
-                v1.0.0 Stable
-              </p>
-            </div>
+             <button
+                onClick={() => {
+                   // Logout action
+                   window.location.href = "/api/auth/logout";
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-slate-300 hover:bg-white/5 hover:text-slate-100"
+             >
+                <LogOut className="w-5 h-5" />
+                <div className="flex-1 text-left">
+                   <div className="font-medium">Cerrar Sesión</div>
+                </div>
+             </button>
+             <div className="bg-white/5 rounded-lg p-3 mt-3">
+               <p className="text-xs text-slate-400">
+                 v1.0.0 Stable
+               </p>
+             </div>
           </div>
         </div>
       </aside>

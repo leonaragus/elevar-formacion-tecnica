@@ -21,9 +21,10 @@ interface CursoCardProps {
   curso: CursoRow;
   professor: string;
   estadoCurso: "ninguno" | "pendiente" | "activo";
+  isAdminView?: boolean;
 }
 
-export default function CursoCard({ curso, professor, estadoCurso }: CursoCardProps) {
+export default function CursoCard({ curso, professor, estadoCurso, isAdminView = false }: CursoCardProps) {
   const isActive = curso.estado === "activo";
 
   return (
@@ -60,21 +61,24 @@ export default function CursoCard({ curso, professor, estadoCurso }: CursoCardPr
         {curso.precio && (
           <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-4">
             <Star className="w-4 h-4 mr-1" />
-            <span className="font-semibold text-green-600 dark:text-green-400">
-              ${curso.precio.toLocaleString()}
-            </span>
+            {isAdminView ? (
+              <span className="font-semibold text-green-600 dark:text-green-400">
+                ${curso.precio.toLocaleString()}
+              </span>
+            ) : (
+              <span className="text-gray-500 dark:text-gray-400">
+                Consultar al administrativo
+              </span>
+            )}
           </div>
         )}
 
         <div className="flex items-center justify-between">
           {estadoCurso === "activo" ? (
             <div className="flex flex-col gap-2 w-full">
-              <Link
-                href={`/cursos/${curso.id}`}
-                className="w-full text-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
-              >
+              <div className="w-full text-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">
                 Bienvenido al cursado de {curso.titulo}
-              </Link>
+              </div>
               <Link
                 href="/perfil"
                 className="w-full text-center px-4 py-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"

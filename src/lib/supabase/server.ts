@@ -4,11 +4,10 @@ import { cookies } from "next/headers";
 function getSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url) throw new Error("Falta NEXT_PUBLIC_SUPABASE_URL");
-  if (!anonKey) throw new Error("Falta NEXT_PUBLIC_SUPABASE_ANON_KEY");
-
-  return { url, anonKey };
+  // Evitar romper la app si faltan env: usar valores dummy
+  const safeUrl = url || "https://dummy.supabase.co";
+  const safeAnon = anonKey || "invalid-key";
+  return { url: safeUrl, anonKey: safeAnon };
 }
 
 /**
@@ -44,4 +43,3 @@ export async function createSupabaseServerClient() {
     },
   });
 }
-

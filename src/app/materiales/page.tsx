@@ -2,6 +2,8 @@
 import { MainLayout } from "@/components/MainLayout";
 import { FileText, Download, Eye, Calendar, AlertTriangle } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { ensureGlossaryForMaterial } from "@/lib/glossary/ensureGlossary";
 import { cookies } from "next/headers";
 import Link from "next/link";
 
@@ -23,12 +25,14 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
   let estadoCursoSeleccionado: "ninguno" | "pendiente" | "activo" = "ninguno";
   let activeCourseTitle = "";
 
-  if (!user && studentOk && typeof studentCourseId === "string" && studentCourseId) {
+  // 1. Check Cookie-based access (legacy/quick access)
+  if (studentOk && typeof studentCourseId === "string" && studentCourseId) {
     hasActive = true;
     selectedId = studentCourseId;
     estadoCursoSeleccionado = "activo";
   }
 
+  // 2. Check Database-based access (Supabase Auth)
   if (user?.id) {
     // Check by ID
     const { data: insc } = await supabase
@@ -57,7 +61,7 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
     hasActive = estados.includes("activo");
     hasPending = estados.includes("pendiente");
     
-    // Find active course
+    // Find active course (allow 'activo' or 'en_desarrollo' if the student is active)
     const activeRow = uniqueInsc.find((r) => r?.estado === "activo" && r?.curso_id != null);
     const activeCourseId = activeRow?.curso_id != null ? String(activeRow.curso_id) : "";
     
@@ -77,12 +81,12 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
       }
     }
 
-    // If no active course, list available courses
+    // If no active course, list available courses (include both active and in development)
     if (!hasActive && !hasPending && !selectedId) {
       const { data, error } = await supabase
         .from("cursos")
         .select("id, titulo")
-        .eq("estado", "activo")
+        .in("estado", ["activo", "en_desarrollo"])
         .order("titulo", { ascending: true });
         
       if (!error && data) {
@@ -96,44 +100,154 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
 
   // Fetch materials if we have a selected active course
   let materiales: any[] = [];
+  let materialCandidates: Array<{ name: string; mimetype: string | null }> = [];
+  let glosarios: Array<{ id: string; titulo: string; url: string; fecha: string; tamaño: string }> = [];
   if (selectedId && estadoCursoSeleccionado === "activo") {
      try {
-       const { data: fileList, error } = await supabase.storage.from("materiales").list(selectedId, {
+       const adminClient = createSupabaseAdminClient();
+       // Try listing with and without leading slash to be compatible with all storage versions
+       const { data: fileList, error } = await adminClient.storage.from("materiales").list(selectedId, {
          limit: 100,
          sortBy: { column: "created_at", order: "desc" }
        });
        
+       console.log("Storage list result:", { count: fileList?.length, error });
+
        if (fileList && !error) {
-         materiales = fileList.map(file => {
-            const publicUrl = supabase.storage.from("materiales").getPublicUrl(`${selectedId}/${file.name}`).data.publicUrl;
-            // Try to extract a clean title from "timestamp-name"
+         // Filter out the 'glosarios' folder itself if it appears in the list
+        const filtered = fileList.filter(
+          (f) => f.name !== "glosarios" && f.name !== "_pending" && !f.metadata?.mimetype?.includes("directory")
+        );
+
+        materialCandidates = filtered.map((f: any) => ({
+          name: String(f?.name || ""),
+          mimetype: typeof f?.metadata?.mimetype === "string" ? String(f.metadata.mimetype) : null,
+        }));
+
+        materiales = filtered.map(file => {
+            const publicUrl = adminClient.storage.from("materiales").getPublicUrl(`${selectedId}/${file.name}`).data.publicUrl;
             const nameParts = file.name.split('-');
             let displayName = file.name;
             if (nameParts.length > 1 && /^\d+$/.test(nameParts[0])) {
                 displayName = nameParts.slice(1).join('-');
             }
+            const createdAt = typeof file.created_at === "string" ? file.created_at : null;
+            const createdMs = createdAt ? new Date(createdAt).getTime() : NaN;
+            const isNew = Number.isFinite(createdMs) ? Date.now() - createdMs <= 3 * 24 * 60 * 60 * 1000 : false;
             
             return {
-               id: file.id,
+               id: file.id || file.name,
                curso_id: selectedId,
                titulo: displayName,
                curso: activeCourseTitle || "Curso Actual",
                tipo: file.metadata?.mimetype?.split('/')?.[1]?.toUpperCase() || "ARCHIVO",
                tamaño: file.metadata?.size ? `${(file.metadata.size / 1024 / 1024).toFixed(2)} MB` : "N/A",
-               fecha: new Date(file.created_at).toLocaleDateString(),
+               fecha: createdAt ? new Date(createdAt).toLocaleDateString() : "Hoy",
                descargas: 0,
-               url: publicUrl
+               url: publicUrl,
+               isNew,
+               created_at: createdAt,
             };
          });
        }
      } catch (e) {
        console.error("Error fetching materials:", e);
      }
+
+     // List glossaries
+     try {
+       const adminClient = createSupabaseAdminClient();
+       const { data: glossList, error: glossErr } = await adminClient.storage.from("materiales").list(`${selectedId}/glosarios`, {
+         limit: 50,
+         sortBy: { column: "created_at", order: "desc" }
+       });
+       if (glossList && !glossErr) {
+         glosarios = glossList
+           .filter(f => f.name.endsWith('.md'))
+           .map((file) => {
+           const publicUrl = adminClient.storage.from("materiales").getPublicUrl(`${selectedId}/glosarios/${file.name}`).data.publicUrl;
+           const baseName = file.name.replace(/\.md$/i, "");
+           const nameParts = baseName.split('-');
+           let displayName = baseName;
+           if (nameParts.length > 1 && /^\d+$/.test(nameParts[0])) {
+             displayName = nameParts.slice(1).join('-');
+           }
+           return {
+             id: file.id || file.name,
+             titulo: displayName,
+             url: publicUrl,
+             fecha: file.created_at ? new Date(file.created_at).toLocaleDateString() : "Hoy",
+             tamaño: file.metadata?.size ? `${(file.metadata.size/1024).toFixed(1)} KB` : "N/A",
+           };
+         });
+       }
+
+      const existingGloss = new Map<string, number>();
+      for (const f of glossList || []) {
+        const n = String((f as any)?.name || "");
+        const sz = Number((f as any)?.metadata?.size ?? 0);
+        if (n) existingGloss.set(n, Number.isFinite(sz) ? sz : 0);
+      }
+      const bucket = "materiales";
+      const candidates = materialCandidates;
+
+      const missing = candidates
+        .filter((c) => {
+          const md = c.name.replace(/\.[^.]+$/, ".md");
+          const size = existingGloss.get(md);
+          return size == null || size === 0;
+        })
+        .slice(0, 1);
+
+      if (missing.length > 0) {
+        const results = await Promise.allSettled(
+          missing.map((m) =>
+            ensureGlossaryForMaterial({
+              supabase: adminClient,
+              bucket,
+              cursoId: String(selectedId),
+              materialName: m.name,
+              materialMimeType: m.mimetype,
+            })
+          )
+        );
+
+        for (const r of results) {
+          if (r.status === "fulfilled" && r.value?.ok && r.value?.glossaryUrl) {
+            const gUrl = r.value.glossaryUrl;
+            const gName = String(gUrl).split("/").pop() || "glosario.md";
+            const baseName = gName.replace(/\.md$/i, "");
+            const parts = baseName.split("-");
+            let displayName = baseName;
+            if (parts.length > 1 && /^\d+$/.test(parts[0])) {
+              displayName = parts.slice(1).join("-");
+            }
+            glosarios = [
+              {
+                id: gName,
+                titulo: displayName,
+                url: gUrl,
+                fecha: new Date().toLocaleDateString(),
+                tamaño: "N/A",
+              },
+              ...glosarios,
+            ];
+          }
+        }
+      }
+     } catch (e) {
+       console.error("Error fetching glossaries:", e);
+     }
   }
 
   return (
     <MainLayout>
       <div className="max-w-5xl mx-auto p-4 md:p-8">
+        {process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_SHOW_DEBUG === "1" && (
+          <div className="mb-4 p-3 bg-black/20 rounded border border-white/10 text-[10px] font-mono text-slate-500">
+            DEBUG: user_id={user?.id || "null"} | student_ok={String(studentOk)} | student_course_id={studentCourseId || "null"} | selectedId={selectedId} | estado={estadoCursoSeleccionado} | count={materiales.length}
+          </div>
+        )}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             Materiales de Estudio
@@ -234,9 +348,16 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
                                 <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                             </div>
                             <div className="flex-1">
-                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1 break-all">
-                                {material.titulo}
-                                </h3>
+                                <div className="flex flex-wrap items-center gap-2 mb-1">
+                                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white break-all">
+                                    {material.titulo}
+                                  </h3>
+                                  {material.isNew && (
+                                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500 text-white">
+                                      Nuevo
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                                 {material.curso}
                                 </p>
@@ -274,6 +395,26 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
                         </div>
                     ))
                 )}
+
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 mt-6">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Glosarios</h2>
+                  {glosarios.length === 0 ? (
+                    <div className="text-sm text-gray-600 dark:text-gray-400">Aún no hay glosarios generados para este curso.</div>
+                  ) : (
+                    glosarios.map((g) => (
+                      <div key={g.id} className="flex items-start justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg mb-3">
+                        <div>
+                          <div className="font-medium text-gray-900 dark:text-white break-all">{g.titulo}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">{g.fecha} · {g.tamaño}</div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Link href={`/glosario?url=${encodeURIComponent(String(g.url || ""))}`} className="px-3 py-2 rounded-lg text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-white">Ver</Link>
+                          <Link href={`${g.url}?download=1`} target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg text-sm bg-blue-600 hover:bg-blue-700 text-white">Descargar</Link>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
                 </div>
             )}
           </>

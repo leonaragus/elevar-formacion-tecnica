@@ -37,7 +37,27 @@ export async function POST(req: NextRequest) {
     } catch {
       supabaseAdmin = null;
     }
+    
     if (user?.id) {
+      // Verificar si el usuario tiene nombre y apellido completos
+      const supabaseServer = await createSupabaseServerClient();
+      const { data: { user: currentUser } } = await supabaseServer.auth.getUser();
+      
+      const nombre = currentUser?.user_metadata?.nombre || '';
+      const apellido = currentUser?.user_metadata?.apellido || '';
+      
+      // Si falta nombre o apellido, redirigir a página de completar datos
+      if (!nombre.trim() || !apellido.trim()) {
+        if (isForm) {
+          return NextResponse.redirect(new URL(`/completar-datos?curso_id=${curso_id}`, req.url));
+        }
+        return NextResponse.json({ 
+          ok: false, 
+          error: "Datos incompletos", 
+          requiere_datos: true,
+          curso_id: curso_id 
+        }, { status: 400 });
+      }
       if (supabaseAdmin) {
         const { error } = await supabaseAdmin
           .from("cursos_alumnos")

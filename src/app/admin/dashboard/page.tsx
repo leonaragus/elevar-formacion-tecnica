@@ -2,28 +2,13 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { PendientesList } from "./PendientesList";
 import { User, Activity, TrendingUp, Users, BookOpen, DollarSign, AlertTriangle, Database, Settings, LogOut, FileText } from "lucide-react";
-import { headers } from "next/headers";
-import { devInscripciones, devIntereses } from "@/lib/devstore";
+import { devInscripciones } from "@/lib/devstore";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-
-type AdminStats = {
-  // ... existing stats type
-  totalCursos: number;
-  totalAlumnos: number;
-  totalProfesores: number;
-  totalPagos: number;
-  cursosActivos: number;
-  alumnosActivos: number;
-  ingresosMes: number;
-  evaluacionesActivas: number;
-  materialesCargados: number;
-};
 
 export default async function AdminDashboardPage() {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Fetch directly instead of using fetch API
   let supabaseAdmin: ReturnType<typeof createSupabaseAdminClient> | null = null;
   try {
     supabaseAdmin = createSupabaseAdminClient();
@@ -31,7 +16,6 @@ export default async function AdminDashboardPage() {
     supabaseAdmin = null;
   }
   
-  // Use admin client if available (bypass RLS), otherwise use user client (respect RLS)
   const client = supabaseAdmin || supabase;
   
   // Stats
@@ -86,26 +70,12 @@ export default async function AdminDashboardPage() {
           combined = [...combined, ...interesesMapeados];
       }
 
-      // Deduplicate
       const unique = combined.filter((v, i, a) => a.findIndex(t => t.user_id === v.user_id && t.curso_id === v.curso_id) === i);
       pendientes = unique;
-
-      // Only use devstore if strictly needed AND if we are not in production (or user explicitly wants demo data)
-      // For now, disabling devstore fallback to avoid "ghost" student issue.
-      /*
-      if (pendientes.length === 0 && (!data && !intereses)) {
-         // Fallback to devstore if DB failed completely
-         const pend = devInscripciones.filter((i) => i.estado === "pendiente");
-         pendientes = pend;
-      }
-      */
   } catch (e: any) {
-      console.error("Dashboard fetch error:", e);
       dbError = e?.message || "Error desconocido";
-      // pendientes = devInscripciones.filter((i) => i.estado === "pendiente"); // Disable fallback
   }
 
-  // Actividades & Recientes (mock)
   const actividades = [
       { descripcion: "Sistema iniciado", fecha: new Date().toLocaleTimeString() }
   ];
@@ -154,18 +124,12 @@ export default async function AdminDashboardPage() {
                   <div className="text-sm font-semibold text-yellow-200">
                     Hay {pendientes.length} inscripción{pendientes.length === 1 ? "" : "es"} pendiente{pendientes.length === 1 ? "" : "s"} de aprobación
                   </div>
-                  <div className="mt-0.5 text-xs text-yellow-100/80">
-                    Revisá el curso solicitado antes de aprobar.
-                  </div>
                   <div className="mt-2 grid gap-1">
                     {pendientes.slice(0, 3).map((p, idx) => {
                       const email = String((p as any)?.email ?? (p as any)?.user_id ?? "Usuario");
-                      const cursoId = String((p as any)?.curso_id ?? "");
-                      const cursoTitulo = String((p as any)?.curso_titulo ?? "");
-                      const cursoLabel = cursoTitulo ? `${cursoTitulo} (${cursoId || "sin id"})` : (cursoId || "Curso pendiente");
                       return (
                         <div key={idx} className="text-xs text-yellow-100/90 truncate">
-                          {email} — {cursoLabel}
+                          {email} — Solicitud pendiente
                         </div>
                       );
                     })}
@@ -175,7 +139,7 @@ export default async function AdminDashboardPage() {
             </div>
           ) : (
              <div className="mb-6 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-400">
-                No hay inscripciones pendientes (Direct check: {pendientes.length})
+                No hay inscripciones pendientes
              </div>
           )}
 
@@ -225,7 +189,6 @@ export default async function AdminDashboardPage() {
                 <AlertTriangle className="w-5 h-5 mr-2 inline text-yellow-400" />
                 Inscripciones Pendientes
               </h2>
-              
               <PendientesList pendientes={pendientes} />
             </section>
             <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
@@ -233,15 +196,8 @@ export default async function AdminDashboardPage() {
                 <Activity className="w-5 h-5 mr-2 inline text-blue-400" />
                 Actividades Recientes
               </h2>
-              
               <div className="space-y-3">
-                {actividades.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400">
-                    <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-yellow-400" />
-                    <p className="text-sm">No hay actividades recientes</p>
-                  </div>
-                ) : (
-                  actividades.map((act, idx) => (
+                {actividades.map((act, idx) => (
                     <div key={idx} className="flex items-start gap-3 p-3 hover:bg-white/5 rounded-lg">
                       <div className="flex-shrink-0 w-2 h-2 bg-blue-400 rounded-full mt-2" />
                       <div className="flex-1 min-w-0">
@@ -249,34 +205,7 @@ export default async function AdminDashboardPage() {
                         <div className="text-xs text-slate-400">{act.fecha || "Hace unos minutos"}</div>
                       </div>
                     </div>
-                  ))
-                )}
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h2 className="text-lg font-semibold text-slate-50 mb-4">
-                <Users className="w-5 h-5 mr-2 inline text-green-400" />
-                Últimos Registros
-              </h2>
-              
-              <div className="space-y-3">
-                {recientes.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400">
-                    <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-yellow-400" />
-                    <p className="text-sm">No hay registros recientes</p>
-                  </div>
-                ) : (
-                  recientes.slice(0, 5).map((reg, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 hover:bg-white/5 rounded-lg">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-slate-50">{reg.email || reg.user_id || "Usuario"}</div>
-                        <div className="text-xs text-slate-400">{reg.action || "Registro"}</div>
-                      </div>
-                      <div className="text-xs text-slate-400">{reg.fecha || "Ahora"}</div>
-                    </div>
-                  ))
-                )}
+                ))}
               </div>
             </section>
           </div>
@@ -284,79 +213,44 @@ export default async function AdminDashboardPage() {
           {/* Panel de Indicadores del Sistema */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h2 className="text-lg font-semibold text-slate-50 mb-4">
-                <Database className="w-5 h-5 mr-2 inline text-blue-400" />
-                Estado de la Base de Datos
+              <h2 className="text-lg font-semibold text-slate-50 mb-4 flex items-center gap-2">
+                <Database className="w-5 h-5 text-blue-400" />
+                Estado BD
               </h2>
-              
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg">
-                  <div className="text-sm font-medium text-slate-50">Conexión</div>
-                  <div className="text-xs text-green-400">Activa</div>
+                <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5">
+                  <span className="text-sm text-slate-400">Conexión</span>
+                  <span className="text-xs text-green-400 font-bold">ACTIVA</span>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg">
-                  <div className="text-sm font-medium text-slate-50">Tablas</div>
-                  <div className="text-xs text-slate-400">{stats.totalCursos + 10} en uso</div>
+                <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5">
+                  <span className="text-sm text-slate-400">Cursos</span>
+                  <span className="text-sm text-slate-200">{stats.totalCursos}</span>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg">
-                  <div className="text-sm font-medium text-slate-50">Registros</div>
-                  <div className="text-xs text-slate-400">{stats.totalAlumnos * 5} activos</div>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg">
-                  <div className="text-sm font-medium text-slate-50">Espacio Usado</div>
-                  <div className="text-xs text-slate-400">2.3 GB / 10 GB</div>
+              </div>
+            </section>
+            
+            <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+              <h2 className="text-lg font-semibold text-slate-50 mb-4 flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-purple-400" />
+                Contenido
+              </h2>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5">
+                  <span className="text-sm text-slate-400">Materiales</span>
+                  <span className="text-sm text-slate-200">{stats.materialesCargados}</span>
                 </div>
               </div>
             </section>
 
             <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h2 className="text-lg font-semibold text-slate-50 mb-4">
-                <BookOpen className="w-5 h-5 mr-2 inline text-purple-400" />
-                Contenido Educativo
+              <h2 className="text-lg font-semibold text-slate-50 mb-4 flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-emerald-400" />
+                Finanzas
               </h2>
-              
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg">
-                  <div className="text-sm font-medium text-slate-50">Materiales Cargados</div>
-                  <div className="text-2xl font-bold text-purple-400">{stats.materialesCargados}</div>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg">
-                  <div className="text-sm font-medium text-slate-50">Videos</div>
-                  <div className="text-xs text-slate-400">45 cargados</div>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg">
-                  <div className="text-sm font-medium text-slate-50">Documentos</div>
-                  <div className="text-xs text-slate-400">120 cargados</div>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg">
-                  <div className="text-sm font-medium text-slate-50">Exámenes</div>
-                  <div className="text-xs text-slate-400">25 activos</div>
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h2 className="text-lg font-semibold text-slate-50 mb-4">
-                <DollarSign className="w-5 h-5 mr-2 inline text-emerald-400" />
-                Indicadores Financieros
-              </h2>
-              
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg">
-                  <div className="text-sm font-medium text-slate-50">Ingresos Mensuales</div>
-                  <div className="text-2xl font-bold text-emerald-400">${stats.ingresosMes.toLocaleString()}</div>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg">
-                  <div className="text-sm font-medium text-slate-50">Pagos Pendientes</div>
-                  <div className="text-xs text-slate-400">$45,000</div>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg">
-                  <div className="text-sm font-medium text-slate-50">Pagos Confirmados</div>
-                  <div className="text-xs text-slate-400">$120,000</div>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg">
-                  <div className="text-sm font-medium text-slate-50">Deuda Total</div>
-                  <div className="text-xs text-slate-400">$15,000</div>
+                <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5">
+                  <span className="text-sm text-slate-400">Ingresos</span>
+                  <span className="text-sm text-emerald-400 font-bold">${stats.ingresosMes}</span>
                 </div>
               </div>
             </section>

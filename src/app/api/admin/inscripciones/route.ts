@@ -56,15 +56,24 @@ export async function GET(req: NextRequest) {
         .eq("estado", "pendiente")
         .limit(100);
       
-      let combined = [];
+      type PendingInscripcion = {
+        user_id: string;
+        curso_id: string;
+        estado: string;
+        user_email?: string | null;
+        curso_titulo?: string | null;
+        source?: string;
+      };
+
+      let combined: PendingInscripcion[] = [];
       if (!error && data) {
-        combined = [...data];
+        combined = [...(data as any[])];
       }
 
       // También traer de intereses (solicitudes por email)
       const { data: intereses, error: errorIntereses } = await supabase
         .from("intereses")
-        .select("*") // Traer todo para evitar errores de selección de columnas
+        .select("*, cursos(titulo)") // Traer también el título del curso
         .limit(100);
       
       let debugInfo = {
@@ -79,6 +88,8 @@ export async function GET(req: NextRequest) {
         const mapped = intereses.map((i: any) => ({
           user_id: i.email,
           curso_id: i.course_id || i.curso_id, // handle potential naming variance
+          curso_titulo: i.cursos?.titulo || "Curso sin título",
+          user_email: i.email,
           estado: "pendiente",
           source: "intereses"
         }));
@@ -89,13 +100,57 @@ export async function GET(req: NextRequest) {
         // ... (código existente de fallback) ...
       }
       
-      // Deduplicate by user_id + curso_id
-      // Don't merge devInscripciones if we have real data connection
-      // const pend = devInscripciones.filter((i) => i.estado === "pendiente");
-      // const all = [...combined, ...pend];
-      const unique = combined.filter((v, i, a) => a.findIndex(t => t.user_id === v.user_id && t.curso_id === v.curso_id) === i);
+      const unique = combined.filter(
+        (v, i, a) => a.findIndex((t) => t.user_id === v.user_id && t.curso_id === v.curso_id) === i
+      );
+
+      // Obtener información adicional de usuarios y cursos
+      const userIds = unique.filter(item => !item.user_id.includes('@')).map(item => item.user_id);
+      const courseIds = unique.map(item => item.curso_id);
       
-      return NextResponse.json({ ok: true, pendientes: unique, debug: debugInfo });
+      let userInfo: any = {};
+      let courseInfo: any = {};
+      
+      if (userIds.length > 0) {
+        try {
+          const { data: users } = await supabase
+            .from('users')
+            .select('id, email')
+            .in('id', userIds)
+            .limit(100);
+          
+          if (users) {
+            users.forEach(user => {
+              userInfo[user.id] = { email: user.email };
+            });
+          }
+        } catch {}
+      }
+      
+      if (courseIds.length > 0) {
+        try {
+          const { data: courses } = await supabase
+            .from('cursos')
+            .select('id, titulo')
+            .in('id', courseIds)
+            .limit(100);
+          
+          if (courses) {
+            courses.forEach(course => {
+              courseInfo[course.id] = { titulo: course.titulo };
+            });
+          }
+        } catch {}
+      }
+      
+       // Enriquecer los datos con información adicional
+       const enriched = unique.map(item => ({
+         ...item,
+         user_email: item.user_email || userInfo[item.user_id]?.email || item.user_id,
+         curso_titulo: item.curso_titulo || courseInfo[item.curso_id]?.titulo || "Curso sin título"
+       }));
+       
+       return NextResponse.json({ ok: true, pendientes: enriched, debug: debugInfo });
     } else {
       const pend = devInscripciones.filter((i) => i.estado === "pendiente");
       return NextResponse.json({ ok: true, pendientes: pend });

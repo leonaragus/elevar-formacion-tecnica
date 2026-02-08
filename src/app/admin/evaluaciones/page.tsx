@@ -7,7 +7,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 
 type EvaluacionRow = {
-  // ...id: string;
+  id: string;
   title: string;
   course_name: string | null;
   created_at: string;
@@ -27,6 +27,9 @@ export default function AdminEvaluacionesPage() {
   const [showNew, setShowNew] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newCourseId, setNewCourseId] = useState("");
+  const [tipoEvaluacion, setTipoEvaluacion] = useState("general");
+  const [materialId, setMaterialId] = useState("");
+  const [unidadNombre, setUnidadNombre] = useState("");
   const [questions, setQuestions] = useState<{ q: string; options: string[]; correct: number }[]>([
     { q: "", options: ["", "", "", ""], correct: 0 }
   ]);
@@ -80,7 +83,10 @@ export default function AdminEvaluacionesPage() {
         body: JSON.stringify({
           title: newTitle,
           course_id: newCourseId,
-          questions
+          questions,
+          tipo_evaluacion: tipoEvaluacion,
+          material_id: tipoEvaluacion === "material" ? materialId : null,
+          unidad: tipoEvaluacion === "unidad" ? unidadNombre : null
         }),
       });
       if (res.ok) {
@@ -88,6 +94,9 @@ export default function AdminEvaluacionesPage() {
         setShowNew(false);
         setNewTitle("");
         setNewCourseId("");
+        setTipoEvaluacion("general");
+        setMaterialId("");
+        setUnidadNombre("");
         setQuestions([{ q: "", options: ["", "", "", ""], correct: 0 }]);
         fetchData();
       } else {
@@ -203,6 +212,46 @@ export default function AdminEvaluacionesPage() {
                     ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Selección de tipo de evaluación */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Tipo de Evaluación</label>
+                  <select
+                    value={tipoEvaluacion}
+                    onChange={(e) => setTipoEvaluacion(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-white/10 rounded-lg text-slate-100 focus:border-blue-500 outline-none"
+                  >
+                    <option value="general">Evaluación General</option>
+                    <option value="material">Por Material Específico</option>
+                    <option value="unidad">Por Unidad Completa</option>
+                  </select>
+                </div>
+                {tipoEvaluacion === "material" && (
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">ID del Material</label>
+                    <input
+                      type="text"
+                      value={materialId}
+                      onChange={(e) => setMaterialId(e.target.value)}
+                      className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100 focus:border-blue-500 outline-none"
+                      placeholder="ID del material específico"
+                    />
+                  </div>
+                )}
+                {tipoEvaluacion === "unidad" && (
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">Nombre de la Unidad</label>
+                    <input
+                      type="text"
+                      value={unidadNombre}
+                      onChange={(e) => setUnidadNombre(e.target.value)}
+                      className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100 focus:border-blue-500 outline-none"
+                      placeholder="Ej: Unidad 1 - Liquidación"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-6 mb-8">
