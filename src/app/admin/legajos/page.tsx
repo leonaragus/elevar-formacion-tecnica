@@ -168,6 +168,7 @@ export default function AdminLegajosPage() {
                   <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Alumno</th>
                   <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Curso</th>
                   <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Documento</th>
+                  <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Promedio</th>
                   <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Estado</th>
                   <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Acciones</th>
                 </tr>
@@ -175,7 +176,7 @@ export default function AdminLegajosPage() {
               <tbody className="bg-white/5">
                 {paginatedLegajos.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                    <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                       <AlertTriangle className="w-8 h-8 mx-auto mb-2" />
                       <p className="text-sm">No se encontraron legajos con los criterios actuales</p>
                     </td>
@@ -197,6 +198,16 @@ export default function AdminLegajosPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-sm text-slate-50">{legajo.documento}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col">
+                          <span className={`text-sm font-bold ${(legajo as any).promedio !== "-" && Number((legajo as any).promedio) >= 6 ? "text-green-400" : "text-slate-300"}`}>
+                            {(legajo as any).promedio || "-"}
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            {(legajo as any).evaluaciones_count || 0} exámenes
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded-full text-xs ${

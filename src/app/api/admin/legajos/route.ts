@@ -32,10 +32,18 @@ export async function GET(req: NextRequest) {
   // Also fetch inscriptions to link course_id
   const { data: inscripciones } = await supabase.from("cursos_alumnos").select("*");
 
+  // Fetch respuestas de evaluaciones para calcular promedios
+  const { data: respuestas } = await supabase.from("evaluaciones_respuestas").select("user_id, score");
+
   const legajos = users.map((u: any) => {
     // Find active or latest inscription
     const userInsc = inscripciones?.filter((i: any) => i.user_id === u.id) || [];
     const activeInsc = userInsc.find((i: any) => i.estado === "activo") || userInsc[0];
+
+    // Calcular notas
+    const userRespuestas = respuestas?.filter((r: any) => r.user_id === u.id) || [];
+    const scores = userRespuestas.map((r: any) => r.score).filter((s: any) => typeof s === 'number');
+    const promedio = scores.length > 0 ? (scores.reduce((a: number, b: number) => a + b, 0) / scores.length).toFixed(1) : "-";
 
     return {
       id: u.id,
@@ -52,6 +60,8 @@ export async function GET(req: NextRequest) {
       estado: activeInsc?.estado === "activo" ? "activo" : "inactivo",
       created_at: u.created_at,
       updated_at: u.updated_at,
+      promedio: promedio,
+      evaluaciones_count: userRespuestas.length
     };
   });
 
