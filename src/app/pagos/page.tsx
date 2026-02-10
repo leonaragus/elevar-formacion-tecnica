@@ -152,7 +152,8 @@ function PagosClient({
   );
 }
 
-export default function PagosPage({ searchParams }: { searchParams?: { curso_id?: string } }) {
+export default async function PagosPage(props: { searchParams: Promise<{ curso_id?: string }> }) {
+  const searchParams = await props.searchParams;
   const { user } = useAuth();
   const router = useRouter();
   const [selectedId, setSelectedId] = useState(() => {

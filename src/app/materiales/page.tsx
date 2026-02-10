@@ -7,7 +7,8 @@ import { ensureGlossaryForMaterial } from "@/lib/glossary/ensureGlossary";
 import { cookies } from "next/headers";
 import Link from "next/link";
 
-export default async function MaterialesPage({ searchParams }: { searchParams?: { curso_id?: string } }) {
+export default async function MaterialesPage(props: { searchParams: Promise<{ curso_id?: string }> }) {
+  const searchParams = await props.searchParams;
   const resolvedSearchParams = searchParams;
   const cookieStore = await cookies();
   const studentOk = cookieStore.get("student_ok")?.value === "1";

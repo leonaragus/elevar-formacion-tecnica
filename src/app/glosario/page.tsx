@@ -5,12 +5,10 @@ import { ensureGlossaryForMaterialKey } from "@/lib/glossary/ensureGlossaryForKe
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export default async function GlosarioPage({
-  searchParams,
-}: {
-  searchParams?: { curso_id?: string; file?: string; url?: string };
+export default async function GlosarioPage(props: {
+  searchParams: Promise<{ curso_id?: string; file?: string; url?: string }>;
 }) {
-  const resolved = searchParams;
+  const resolved = await props.searchParams;
   const cursoId = typeof resolved?.curso_id === "string" ? resolved.curso_id : "";
   const file = typeof resolved?.file === "string" ? resolved.file : "";
   const directUrl = typeof resolved?.url === "string" ? resolved.url : "";

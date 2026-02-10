@@ -7,12 +7,10 @@ import Link from "next/link";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export default async function GlosarioPage({
-  searchParams,
-}: {
-  searchParams?: { curso_id?: string; name?: string };
+export default async function GlosarioPage(props: {
+  searchParams: Promise<{ curso_id?: string; name?: string }>;
 }) {
-  const params = searchParams;
+  const params = await props.searchParams;
   const cursoId = String(params?.curso_id || "");
   const name = String(params?.name || "");
 

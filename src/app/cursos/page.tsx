@@ -28,7 +28,8 @@ function getCursoProfessor(curso: CursoRow) {
   return typeof v === "string" && v.trim() ? v : "Profesor";
 }
 
-export default async function CursosPage({ searchParams }: { searchParams?: { solicitud?: string; error?: string } }) {
+export default async function CursosPage(props: { searchParams: Promise<{ solicitud?: string; error?: string }> }) {
+  const searchParams = await props.searchParams;
   const resolvedSearchParams = searchParams;
   let studentEmail: string | undefined;
   let studentOk = false;

@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic";
 
 type SearchParams = { [key: string]: string | string[] | undefined };
 
-export default async function AdminCursoDetailPage(props: { searchParams: SearchParams }) {
-  const searchParams = props.searchParams;
+export default async function AdminCursoDetailPage(props: { searchParams: Promise<SearchParams> }) {
+  const searchParams = await props.searchParams;
   const id = searchParams.id as string;
   
   if (!id) {

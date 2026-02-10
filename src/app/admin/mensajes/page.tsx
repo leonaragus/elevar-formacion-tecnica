@@ -3,7 +3,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { User, Activity, FileText, AlertTriangle, Plus, Trash2, Send, Globe } from "lucide-react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 
-export default async function AdminMensajesPage({ searchParams }: { searchParams: { ok?: string, error?: string } }) {
+export default async function AdminMensajesPage(props: { searchParams: Promise<{ ok?: string, error?: string }> }) {
+  const searchParams = await props.searchParams;
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
 
