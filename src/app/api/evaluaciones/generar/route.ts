@@ -45,22 +45,44 @@ export async function POST(req: NextRequest) {
     // 2. Extraer texto del PDF
     let pdfText = "";
     try {
-      const { PDFParse } = await import("pdf-parse");
-      const parser = new PDFParse({ data: buffer });
-      const result = await parser.getText();
-      pdfText = result.text;
+      // Intentar cargar pdf-parse de forma dinámica para evitar problemas de empaquetado
+      const pdfParseModule = await import("pdf-parse");
+      // Manejar tanto la exportación por defecto como la nombrada, por compatibilidad
+      const PDFParse = pdfParseModule.default || pdfParseModule;
+      
+      const data = await PDFParse(buffer);
+      pdfText = data.text;
     } catch (error) {
-      console.error("Error al leer PDF:", error);
-      return NextResponse.json(
-        { error: "Error al procesar el archivo PDF" },
-        { status: 500 }
-      );
+      console.error("Error al leer PDF con pdf-parse:", error);
+      
+      // Fallback simple: intentar extraer strings legibles del buffer si falla el parser
+      // Esto ayuda con algunos PDFs mal formados o versiones nuevas no soportadas
+      try {
+        const raw = buffer.toString('latin1');
+        // Buscar patrones de texto entre paréntesis (formato PDF básico)
+        const matches = raw.match(/\((.*?)\)/g);
+        if (matches && matches.length > 20) {
+            pdfText = matches.map(m => m.slice(1, -1)).join(" ");
+        }
+      } catch (e) {
+          console.error("Fallback extraction failed", e);
+      }
+      
+      if (!pdfText || pdfText.length < 50) {
+          return NextResponse.json(
+            { error: "No se pudo extraer texto del PDF. Asegúrese de que no sea una imagen escaneada." },
+            { status: 400 }
+          );
+      }
     }
+
+    // Limpieza básica de texto extraído
+    pdfText = pdfText.replace(/\s+/g, " ").trim();
 
     // Validar longitud del texto
     if (pdfText.length < 50) {
       return NextResponse.json(
-        { error: "El PDF no contiene suficiente texto legible" },
+        { error: "El PDF no contiene suficiente texto legible (posiblemente escaneado)." },
         { status: 400 }
       );
     }
