@@ -1,0 +1,10 @@
+[33m77ba26b[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m feat: Implementar creacion de evaluaciones por material/unidad, fix nombres materiales, mejorar UI admin
+[33m8a89660[m Improve error handling and check service key presence for file uploads
+[33mcde3752[m Fix file upload, clean up old routes, and implement student material view
+[33mbc195f8[m Fix file upload auth and implement real materials fetching for students
+[33m23ad470[m Refactor: Switch to query params for course detail to resolve 404s
+[33md08d695[m Force dynamic rendering for course detail page to prevent 404s
+[33m577f58c[m Fix param handling syntax for Next.js 16 strict typing
+[33m3a047c9[m Add static test page to debug routing
+[33ma052eb8[m Refactor: Move course detail to /admin/detalle-curso to avoid routing conflicts
+[33m06f5e87[m Restore course detail page files

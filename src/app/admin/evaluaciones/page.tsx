@@ -1,10 +1,11 @@
-"use client";
+ "use client";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useState, useEffect } from "react";
-import { User, Activity, Users, BookOpen, DollarSign, Database, Settings, Search, Plus, Trash2, CheckCircle, AlertTriangle, FileText, Send } from "lucide-react";
+import { User, Activity, Users, BookOpen, DollarSign, Database, Settings, Search, Plus, Trash2, CheckCircle, AlertTriangle, FileText, Send, ArrowLeft, Loader2, Upload } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import Link from "next/link";
 
 type EvaluacionRow = {
   id: string;
@@ -34,6 +35,8 @@ export default function AdminEvaluacionesPage() {
     { q: "", options: ["", "", "", ""], correct: 0 }
   ]);
   const [saving, setSaving] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -71,8 +74,8 @@ export default function AdminEvaluacionesPage() {
   };
 
   const handleSave = async () => {
-    if (!newTitle || !newCourseId) {
-      alert("Complete el título y seleccione un curso");
+    if (!newTitle) {
+      alert("Complete el título del examen");
       return;
     }
     setSaving(true);
@@ -82,7 +85,7 @@ export default function AdminEvaluacionesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: newTitle,
-          course_id: newCourseId,
+          course_id: newCourseId || null,
           questions,
           tipo_evaluacion: tipoEvaluacion,
           material_id: tipoEvaluacion === "material" ? materialId : null,
@@ -90,7 +93,7 @@ export default function AdminEvaluacionesPage() {
         }),
       });
       if (res.ok) {
-        alert("Evaluación creada y enviada a los alumnos del curso");
+        alert(newCourseId ? "Evaluación enviada a los alumnos" : "Evaluación guardada como borrador");
         setShowNew(false);
         setNewTitle("");
         setNewCourseId("");
@@ -109,11 +112,39 @@ export default function AdminEvaluacionesPage() {
     }
   };
 
+  const handlePublish = async (id: string, courseId: string) => {
+    if (!courseId) {
+      alert("Seleccione un curso para enviar la evaluación");
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/evaluaciones", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, course_id: courseId }),
+      });
+      const json = await res.json().catch(() => null as any);
+      if (res.ok && (json?.ok || json?.fallback)) {
+        fetchData();
+        alert("Evaluación enviada al curso seleccionado");
+      } else {
+        alert(json?.error || "No se pudo enviar la evaluación");
+      }
+    } catch {
+      alert("Error al enviar la evaluación");
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm("¿Eliminar esta evaluación?")) return;
     try {
       const res = await fetch(`/api/admin/evaluaciones?id=${id}`, { method: "DELETE" });
-      if (res.ok) fetchData();
+      const json = await res.json().catch(() => null as any);
+      if (res.ok && (json?.ok || json?.fallback)) {
+        fetchData();
+      } else {
+        alert(json?.error || "No se pudo eliminar la evaluación");
+      }
     } catch (e) {
       alert("Error");
     }
@@ -122,6 +153,12 @@ export default function AdminEvaluacionesPage() {
   return (
     <AdminLayout>
       <div className="p-4 md:p-8">
+          <div className="mb-3">
+            <Link href="/admin/dashboard" className="inline-flex items-center text-sm text-slate-400 hover:text-slate-200 transition-colors">
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              Volver al Dashboard
+            </Link>
+          </div>
           <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
             <div>
               <h1 className="text-xl font-semibold text-slate-50">
@@ -129,7 +166,7 @@ export default function AdminEvaluacionesPage() {
                 Gestión de Evaluaciones
               </h1>
               <p className="mt-1 text-sm text-slate-400">
-                Crea exámenes y envíalos automáticamente a los alumnos
+                Crea exámenes, revísalos y envíalos a los alumnos
               </p>
             </div>
             <div className="flex items-center gap-4 text-sm text-slate-300">
@@ -165,13 +202,39 @@ export default function AdminEvaluacionesPage() {
                       <div>
                         <div className="text-base font-medium text-slate-50">{ev.title}</div>
                         <div className="text-xs text-slate-400">
-                          Curso: {ev.course_name || "General"} • {ev.questions_count} preguntas
+                          {ev.course_name ? (
+                            <>Curso: {ev.course_name} • {ev.questions_count} preguntas</>
+                          ) : (
+                            <>Borrador (sin curso) • {ev.questions_count} preguntas</>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="text-xs px-2 py-1 bg-green-900/30 text-green-400 rounded border border-green-500/20 flex items-center gap-1">
-                          <Send className="w-3 h-3" /> Enviada
-                        </div>
+                        {ev.course_name ? (
+                          <div className="text-xs px-2 py-1 bg-green-900/30 text-green-400 rounded border border-green-500/20 flex items-center gap-1">
+                            <Send className="w-3 h-3" /> Enviada
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={newCourseId}
+                              onChange={(e) => setNewCourseId(e.target.value)}
+                              className="px-2 py-1 bg-slate-900 border border-white/10 rounded text-xs text-slate-100"
+                            >
+                              <option value="">Seleccionar curso...</option>
+                              {cursos.map((c) => (
+                                <option key={c.id} value={c.id}>{c.titulo}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => handlePublish(ev.id, newCourseId)}
+                              className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs flex items-center gap-1"
+                            >
+                              <Send className="w-3 h-3" />
+                              Enviar
+                            </button>
+                          </div>
+                        )}
                         <button
                           onClick={() => handleDelete(ev.id)}
                           className="p-2 text-red-400 hover:bg-red-900/20 rounded-lg"
@@ -200,7 +263,7 @@ export default function AdminEvaluacionesPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Asignar al Curso</label>
+                  <label className="text-xs text-slate-400 mb-1 block">Asignar al Curso (opcional)</label>
                   <select
                     value={newCourseId}
                     onChange={(e) => setNewCourseId(e.target.value)}
@@ -212,6 +275,52 @@ export default function AdminEvaluacionesPage() {
                     ))}
                   </select>
                 </div>
+              </div>
+
+              <div className="mb-6 p-4 bg-white/5 rounded-xl border border-white/10">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-sm text-slate-300 flex items-center gap-2">
+                    <Upload className="w-4 h-4 text-blue-400" />
+                    Generar preguntas con IA desde PDF
+                  </div>
+                  {aiGenerating && <Loader2 className="w-4 h-4 animate-spin text-blue-400" />}
+                </div>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setAiError(null);
+                    setAiGenerating(true);
+                    try {
+                      const fd = new FormData();
+                      fd.append("file", file);
+                      const res = await fetch("/api/evaluaciones/generar", { method: "POST", body: fd });
+                      const json = await res.json();
+                      if (!res.ok) {
+                        throw new Error(json?.error || "Error al generar");
+                      }
+                      setNewTitle(json?.title || newTitle || "Examen automático");
+                      const mapped = Array.isArray(json?.questions)
+                        ? json.questions.map((q: any) => ({
+                            q: q.question,
+                            options: q.options,
+                            correct: Number(q.correctAnswer ?? 0),
+                          }))
+                        : [];
+                      if (mapped.length > 0) setQuestions(mapped);
+                    } catch (e: any) {
+                      setAiError(e?.message || "Error");
+                    } finally {
+                      setAiGenerating(false);
+                    }
+                  }}
+                  className="w-full text-xs text-slate-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border file:border-white/10 file:bg-white/10 file:text-slate-100 file:hover:bg-white/20"
+                />
+                {aiError && (
+                  <div className="mt-2 text-xs text-red-400">{aiError}</div>
+                )}
               </div>
 
               {/* Selección de tipo de evaluación */}
@@ -321,7 +430,7 @@ export default function AdminEvaluacionesPage() {
                   disabled={saving}
                   className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium disabled:opacity-50"
                 >
-                  {saving ? "Guardando..." : "Crear y Enviar"}
+                  {saving ? "Guardando..." : (newCourseId ? "Crear y Enviar" : "Guardar borrador")}
                 </button>
               </div>
             </div>

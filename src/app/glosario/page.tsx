@@ -8,9 +8,9 @@ export const runtime = "nodejs";
 export default async function GlosarioPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ curso_id?: string; file?: string; url?: string }>;
+  searchParams?: { curso_id?: string; file?: string; url?: string };
 }) {
-  const resolved = await searchParams;
+  const resolved = searchParams;
   const cursoId = typeof resolved?.curso_id === "string" ? resolved.curso_id : "";
   const file = typeof resolved?.file === "string" ? resolved.file : "";
   const directUrl = typeof resolved?.url === "string" ? resolved.url : "";
@@ -140,9 +140,48 @@ export default async function GlosarioPage({
             Este glosario está vacío o no se pudo generar todavía.
           </div>
         ) : (
-          <pre className="whitespace-pre-wrap break-words rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 text-sm text-gray-900 dark:text-gray-100">
-            {content}
-          </pre>
+          <div className="space-y-4">
+            {(() => {
+              const txt = String(content || "");
+              const lines = txt.split("\n");
+              const sections: Array<{ title: string; body: string }> = [];
+              let curTitle = "";
+              let curBody: string[] = [];
+              const flush = () => {
+                const body = curBody.join("\n").trim();
+                if (curTitle && body) sections.push({ title: curTitle, body });
+                curTitle = "";
+                curBody = [];
+              };
+              for (const raw of lines) {
+                const line = raw.replace(/\r$/, "");
+                if (line.startsWith("# ")) continue;
+                if (line.startsWith("### ")) {
+                  flush();
+                  curTitle = line.replace(/^###\s+/, "").trim();
+                } else {
+                  curBody.push(line);
+                }
+              }
+              flush();
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {sections.length === 0 ? (
+                    <div className="col-span-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 text-sm text-gray-700 dark:text-gray-300">
+                      Este glosario no tiene secciones reconocibles.
+                    </div>
+                  ) : (
+                    sections.map((s, i) => (
+                      <div key={i} className="group rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-gray-900 p-5 hover:shadow-lg hover:border-blue-500/40 transition-all">
+                        <div className="text-base font-semibold text-gray-900 dark:text-white mb-2">{s.title}</div>
+                        <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">{s.body}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              );
+            })()}
+          </div>
         )}
       </div>
     </MainLayout>

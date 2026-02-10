@@ -1,145 +1,259 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
-export default function CompletarDatosClient({
-  userEmail,
-  cursoId,
-  currentNombre,
-  currentApellido
-}: {
-  userEmail: string;
-  cursoId?: string;
-  currentNombre: string;
-  currentApellido: string;
-}) {
+export default function CompletarDatosClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const curso_id = searchParams.get('curso_id');
+  
   const [formData, setFormData] = useState({
-    nombre: currentNombre,
-    apellido: currentApellido
+    nombre: '',
+    apellido: '',
+    documento: '',
+    telefono: '',
+    direccion: '',
+    fecha_nacimiento: '',
   });
+  
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+
+  useEffect(() => {
+    const getUserData = async () => {
+      const supabase = createSupabaseBrowserClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        setUserEmail(user.email || '');
+        setFormData({
+          nombre: user.user_metadata?.nombre || '',
+          apellido: user.user_metadata?.apellido || '',
+          documento: user.user_metadata?.documento || '',
+          telefono: user.user_metadata?.telefono || '',
+          direccion: user.user_metadata?.direccion || '',
+          fecha_nacimiento: user.user_metadata?.fecha_nacimiento || '',
+        });
+      } else {
+        // Intentar recuperar email de localStorage para usuarios sin sesión Auth completa
+        const storedEmail = localStorage.getItem('student_email');
+        if (storedEmail) {
+          setUserEmail(storedEmail);
+        }
+      }
+    };
+    
+    getUserData();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
+    setError('');
+
+    if (!formData.nombre.trim() || !formData.apellido.trim()) {
+      setError('Nombre y apellido son obligatorios');
+      setLoading(false);
+      return;
+    }
 
     try {
-      const response = await fetch('/api/perfil', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          nombre: formData.nombre.trim(),
-          apellido: formData.apellido.trim(),
-          email: userEmail
-        }),
-      });
+      const supabase = createSupabaseBrowserClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // Solo intentar actualizar auth user si existe sesión real
+      if (session) {
+        const { error: updateError } = await supabase.auth.updateUser({
+          data: {
+            nombre: formData.nombre.trim(),
+            apellido: formData.apellido.trim(),
+            documento: formData.documento.trim(),
+            telefono: formData.telefono.trim(),
+            direccion: formData.direccion.trim(),
+            fecha_nacimiento: formData.fecha_nacimiento.trim(),
+          }
+        });
 
-      if (response.ok) {
-        // Si hay un curso_id, redirigir a la página del curso para completar la inscripción
-        if (cursoId) {
-          router.push(`/cursos/${cursoId}?solicitud=pendiente`);
-        } else {
+        if (updateError) {
+          console.error("Error actualizando usuario auth:", updateError);
+          // No lanzamos error aquí para permitir continuar con la inscripción si falla update auth
+        }
+      }
+
+      // Si hay un curso_id, redirigir a la inscripción
+      if (curso_id) {
+        // Realizar la inscripción automáticamente enviando datos
+        const response = await fetch('/api/alumno/inscripcion', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            curso_id,
+            nombre: formData.nombre.trim(),
+            apellido: formData.apellido.trim(),
+            // Enviamos datos extra por si el endpoint los maneja o manejará
+            documento: formData.documento.trim(),
+            telefono: formData.telefono.trim(),
+            direccion: formData.direccion.trim(),
+            fecha_nacimiento: formData.fecha_nacimiento.trim()
+          }),
+        });
+
+        if (response.ok) {
           router.push('/cursos?solicitud=pendiente');
+        } else {
+          const result = await response.json();
+          throw new Error(result.error || 'Error al realizar la inscripción');
         }
       } else {
-        const data = await response.json();
-        setError(data.error || 'Error al guardar los datos');
+        // Si no hay curso_id, redirigir al perfil
+        router.push('/perfil?actualizado=true');
       }
-    } catch (err) {
-      setError('Error de conexión. Intenta nuevamente.');
+
+    } catch (err: any) {
+      setError(err.message || 'Error al guardar los datos');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSkip = () => {
-    // Si el usuario decide saltar, redirigir directamente al curso
-    if (cursoId) {
-      router.push(`/cursos/${cursoId}?solicitud=pendiente`);
-    } else {
-      router.push('/cursos');
-    }
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          <h1 className="text-2xl font-bold text-gray-900">
             Completa tus datos
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Necesitamos conocer tu nombre y apellido para procesar tu solicitud de inscripción.
+          <p className="text-gray-600 mt-2">
+            Necesitamos algunos datos básicos para continuar
           </p>
+          {userEmail && (
+            <p className="text-sm text-gray-500 mt-1">
+              Email: {userEmail}
+            </p>
+          )}
         </div>
 
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4">
-            <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+            {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="nombre" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="nombre" className="block text-sm font-medium text-gray-700">
               Nombre *
             </label>
             <input
               type="text"
               id="nombre"
+              name="nombre"
               required
               value={formData.nombre}
-              onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              onChange={handleInputChange}
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Tu nombre"
             />
           </div>
 
           <div>
-            <label htmlFor="apellido" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="apellido" className="block text-sm font-medium text-gray-700">
               Apellido *
             </label>
             <input
               type="text"
               id="apellido"
+              name="apellido"
               required
               value={formData.apellido}
-              onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              onChange={handleInputChange}
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Tu apellido"
             />
           </div>
 
-          <div className="flex gap-3">
+          <div>
+            <label htmlFor="documento" className="block text-sm font-medium text-gray-700">
+              Documento
+            </label>
+            <input
+              type="text"
+              id="documento"
+              name="documento"
+              value={formData.documento}
+              onChange={handleInputChange}
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Número de documento"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="telefono" className="block text-sm font-medium text-gray-700">
+              Teléfono
+            </label>
+            <input
+              type="tel"
+              id="telefono"
+              name="telefono"
+              value={formData.telefono}
+              onChange={handleInputChange}
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Número de teléfono"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="direccion" className="block text-sm font-medium text-gray-700">
+              Dirección
+            </label>
+            <input
+              type="text"
+              id="direccion"
+              name="direccion"
+              value={formData.direccion}
+              onChange={handleInputChange}
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Tu dirección"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="fecha_nacimiento" className="block text-sm font-medium text-gray-700">
+              Fecha de Nacimiento
+            </label>
+            <input
+              type="date"
+              id="fecha_nacimiento"
+              name="fecha_nacimiento"
+              value={formData.fecha_nacimiento}
+              onChange={handleInputChange}
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+              className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Guardando...' : 'Guardar y continuar'}
-            </button>
-            
-            <button
-              type="button"
-              onClick={handleSkip}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            >
-              Saltar
+              {loading ? 'Guardando...' : 'Guardar Datos'}
             </button>
           </div>
         </form>
-
-        <div className="mt-4 text-center">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            * Estos datos aparecerán en tu perfil y en las listas del administrador.
-          </p>
-        </div>
       </div>
     </div>
   );

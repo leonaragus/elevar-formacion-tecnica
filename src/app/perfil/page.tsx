@@ -21,13 +21,22 @@ export default function PerfilPage() {
     fecha_nacimiento: "",
     email: "", // Added email to state
   });
+  const [originalForm, setOriginalForm] = useState({
+    nombre: "",
+    apellido: "",
+    documento: "",
+    telefono: "",
+    direccion: "",
+    fecha_nacimiento: "",
+    email: "",
+  });
 
   useEffect(() => {
     // Wait for auth to finish loading
     if (authLoading) return;
 
     if (user) {
-      setFormData({
+      const filled = {
         nombre: user.user_metadata?.nombre || "",
         apellido: user.user_metadata?.apellido || "",
         documento: user.user_metadata?.documento || "",
@@ -35,7 +44,9 @@ export default function PerfilPage() {
         direccion: user.user_metadata?.direccion || "",
         fecha_nacimiento: user.user_metadata?.fecha_nacimiento || "",
         email: user.email || "",
-      });
+      };
+      setFormData(filled);
+      setOriginalForm(filled);
       setLoading(false);
     } else {
       // Fallback: check cookie
@@ -45,15 +56,18 @@ export default function PerfilPage() {
         if (parts.length === 2) return parts.pop()?.split(";").shift();
       };
       const email = decodeURIComponent(getCookie("student_email") || "");
-      
-      if (email) {
-        setFormData(prev => ({ ...prev, email }));
-        // Optionally fetch existing data here if we had an endpoint
-        setLoading(false);
-      } else {
-        // No user, no cookie -> Redirect or just show form empty
-        setLoading(false);
-      }
+      const filled = {
+        nombre: "",
+        apellido: "",
+        documento: "",
+        telefono: "",
+        direccion: "",
+        fecha_nacimiento: "",
+        email: email || "",
+      };
+      setFormData(filled);
+      setOriginalForm(filled);
+      setLoading(false);
     }
   }, [user, authLoading]);
 
@@ -73,7 +87,11 @@ export default function PerfilPage() {
         body: JSON.stringify(formData),
       });
 
-      if (!response.ok) throw new Error("Error al guardar los datos");
+      const json = await response.json().catch(() => null as any);
+      if (!response.ok || json?.ok === false) {
+        const text = json?.error ? String(json.error) : "Error al guardar los datos";
+        throw new Error(text);
+      }
 
       // Actualizar localmente para reflejar cambios inmediatos si es necesario
       const supabase = createSupabaseBrowserClient();
@@ -81,10 +99,16 @@ export default function PerfilPage() {
 
       setMsg({ type: "success", text: "Datos actualizados correctamente" });
     } catch (error) {
-      setMsg({ type: "error", text: "No se pudieron guardar los cambios" });
+      const text = error instanceof Error ? error.message : "No se pudieron guardar los cambios";
+      setMsg({ type: "error", text });
     } finally {
       setSaving(false);
     }
+  };
+  
+  const handleCancel = () => {
+    setFormData(originalForm);
+    setMsg(null);
   };
 
   if (loading) {
@@ -188,6 +212,14 @@ export default function PerfilPage() {
             )}
 
             <div className="flex justify-end pt-4">
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={saving}
+                className="mr-3 flex items-center gap-2 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-6 py-2 rounded-lg border border-gray-300 dark:border-gray-700 font-medium transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                Cancelar
+              </button>
               <button
                 type="submit"
                 disabled={saving}

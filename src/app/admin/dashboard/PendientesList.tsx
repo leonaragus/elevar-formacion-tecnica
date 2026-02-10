@@ -12,6 +12,8 @@ export function PendientesList({ pendientes }: { pendientes: any[] }) {
     const user_id = typeof pend?.user_id === "string" ? pend.user_id : "";
     const curso_id = typeof pend?.curso_id === "string" ? pend.curso_id : "";
     const cursoTitulo = typeof pend?.curso_titulo === "string" ? pend.curso_titulo : "";
+    const nombre = typeof pend?.nombre === "string" ? pend.nombre : "";
+    const apellido = typeof pend?.apellido === "string" ? pend.apellido : "";
     const label = (email || user_id || "usuario").toString();
     const cursoLabel = cursoTitulo ? `${cursoTitulo} (${curso_id || "sin id"})` : (curso_id || "sin curso");
     if (!confirm(`¿Aprobar inscripción de ${label} para ${cursoLabel}?`)) return;
@@ -21,7 +23,7 @@ export function PendientesList({ pendientes }: { pendientes: any[] }) {
         const res = await fetch("/api/admin/approve", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, user_id, curso_id })
+            body: JSON.stringify({ email, user_id, curso_id, nombre, apellido })
         });
         if (res.ok) {
             router.refresh();
@@ -48,13 +50,18 @@ export function PendientesList({ pendientes }: { pendientes: any[] }) {
   return (
     <div className="max-h-96 overflow-auto">
       <div className="space-y-3">
-          {pendientes.map((pend, idx) => {
+          {[...pendientes].sort((a, b) => {
+            const ta = a?.created_at ? new Date(a.created_at).getTime() : 0;
+            const tb = b?.created_at ? new Date(b.created_at).getTime() : 0;
+            return tb - ta;
+          }).map((pend, idx) => {
             const curso_id = typeof pend?.curso_id === "string" ? pend.curso_id : "";
             const cursoTitulo = typeof pend?.curso_titulo === "string" ? pend.curso_titulo : "";
             const cursoLabel = cursoTitulo ? `${cursoTitulo} (${curso_id || "sin id"})` : (curso_id || "Curso pendiente");
             const createdAt = typeof pend?.created_at === "string" ? pend.created_at : "";
             const createdLabel = createdAt ? new Date(createdAt).toLocaleString("es-AR") : "";
-            const label = (pend?.email || pend?.user_id || "Usuario").toString();
+            const nameLabel = [pend?.nombre, pend?.apellido].filter(Boolean).join(" ").trim();
+            const label = nameLabel || (pend?.email || pend?.user_id || "Usuario").toString();
             const key = `${label}::${curso_id}`;
             return (
               <div key={idx} className="flex items-center justify-between p-3 hover:bg-white/5 rounded-lg">

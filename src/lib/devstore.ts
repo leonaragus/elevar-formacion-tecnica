@@ -45,6 +45,39 @@ export type DevPago = {
 };
 export const devPagos: DevPago[] = [];
 
+export type DevPerfil = {
+  email: string;
+  nombre?: string;
+  apellido?: string;
+  documento?: string;
+  telefono?: string;
+  direccion?: string;
+  fecha_nacimiento?: string;
+  updated_at: string;
+};
+export const devPerfiles: DevPerfil[] = [];
+
+export function upsertPerfil(email: string, meta: Partial<DevPerfil>) {
+  const normalized = String(email || "").trim().toLowerCase();
+  if (!normalized) return;
+  const idx = devPerfiles.findIndex((p) => p.email.toLowerCase() === normalized);
+  const payload: DevPerfil = {
+    email: normalized,
+    nombre: meta.nombre ?? "",
+    apellido: meta.apellido ?? "",
+    documento: meta.documento ?? "",
+    telefono: meta.telefono ?? "",
+    direccion: meta.direccion ?? "",
+    fecha_nacimiento: meta.fecha_nacimiento ?? "",
+    updated_at: new Date().toISOString(),
+  };
+  if (idx >= 0) {
+    devPerfiles[idx] = { ...devPerfiles[idx], ...payload };
+  } else {
+    devPerfiles.push(payload);
+  }
+}
+
 devCursos.push({
   id: "liquidacion-de-sueldos",
   titulo: "Liquidación de Sueldos",
@@ -188,6 +221,56 @@ devEvaluaciones.push({
       question: "¿Qué documento formaliza la relación laboral?",
       options: ["CUIL", "Convenio colectivo", "Recibo de sueldo", "Contrato de trabajo"],
       correctAnswer: 3,
+    },
+  ],
+  created_at: new Date().toISOString(),
+});
+
+devEvaluaciones.push({
+  id: "eval-gestion-doc-1",
+  title: "Evaluación Demo: Gestión Documental",
+  course_name: "Diplomatura en Gestión y Control Documental",
+  source_filename: null,
+  questions: [
+    {
+      question: "¿Cuál es el objetivo principal del control documental?",
+      options: [
+        "Garantizar trazabilidad y versión única",
+        "Incrementar costos operativos",
+        "Eliminar auditorías",
+        "Evitar respaldos",
+      ],
+      correctAnswer: 0,
+    },
+    {
+      question: "¿Qué metadato es clave para la búsqueda eficaz?",
+      options: ["Color de papel", "Fecha y autor", "Tamaño de fuente", "Tipo de grapa"],
+      correctAnswer: 1,
+    },
+    {
+      question: "¿Qué política asegura integridad del documento?",
+      options: ["Control de versiones", "Impresión en masa", "Uso de carpetas físicas", "Compartir por mensajería"],
+      correctAnswer: 0,
+    },
+    {
+      question: "¿Cuál es la diferencia entre copia y original controlado?",
+      options: [
+        "Original controlado posee aprobación y trazabilidad",
+        "No hay diferencia",
+        "La copia es siempre firmada digitalmente",
+        "Original nunca se distribuye",
+      ],
+      correctAnswer: 0,
+    },
+    {
+      question: "¿Qué requisito es típico de auditorías ISO para documentación?",
+      options: [
+        "Obligatorio registro de cambios y responsables",
+        "Uso exclusivo de archivos impresos",
+        "Eliminar históricos",
+        "Evitar respaldos",
+      ],
+      correctAnswer: 0,
     },
   ],
   created_at: new Date().toISOString(),

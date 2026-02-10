@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     if (!teacher && !enforcedCourse) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
-    const supabase = await createSupabaseServerClient();
+    const supabase = teacher ? createSupabaseAdminClient() : await createSupabaseServerClient();
     const { data, error } = await supabase
       .from("evaluaciones")
       .select("id,title,course_name,created_at")
@@ -77,7 +77,11 @@ export async function GET(req: NextRequest) {
         msg.includes("invalid api key") ||
         msg.includes("row-level security") ||
         msg.includes("permission denied") ||
-        msg.includes("violates");
+        msg.includes("violates") ||
+        msg.includes("could not find") ||
+        msg.includes("does not exist") ||
+        msg.includes("schema cache") ||
+        msg.includes("column");
       if (shouldFallback) {
         const base = devEvaluaciones.map((e) => ({
           id: e.id,

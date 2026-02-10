@@ -28,8 +28,8 @@ function getCursoProfessor(curso: CursoRow) {
   return typeof v === "string" && v.trim() ? v : "Profesor";
 }
 
-export default async function CursosPage({ searchParams }: { searchParams?: Promise<{ solicitud?: string; error?: string }> }) {
-  const resolvedSearchParams = await searchParams;
+export default async function CursosPage({ searchParams }: { searchParams?: { solicitud?: string; error?: string } }) {
+  const resolvedSearchParams = searchParams;
   let studentEmail: string | undefined;
   let studentOk = false;
   let studentCourseId: string | undefined;
@@ -260,34 +260,29 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
     }
   }
 
-  // Admin messages (global or targeted to active course)
+  // Admin messages (solo visibles si hay curso activo)
   let mensajes: Array<{ titulo: string; contenido: string; created_at: string }> = [];
-  try {
-    const adminClient = createSupabaseAdminClient();
-    let query = adminClient
-      .from("mensajes")
-      .select("titulo, contenido, created_at, curso_id")
-      .order("created_at", { ascending: false })
-      .limit(30);
-    
-    // Filter: messages with no curso_id (global) OR messages for active courses
-    if (activeCourseIds.length > 0) {
-        query = query.or(`curso_id.is.null,curso_id.in.(${activeCourseIds.join(",")})`);
-    } else {
-        query = query.is("curso_id", null);
+  if (hasActive && activeCourseIds.length > 0) {
+    try {
+      const adminClient = createSupabaseAdminClient();
+      let query = adminClient
+        .from("mensajes")
+        .select("titulo, contenido, created_at, curso_id")
+        .order("created_at", { ascending: false })
+        .limit(30)
+        .or(`curso_id.is.null,curso_id.in.(${activeCourseIds.join(",")})`);
+  
+      const { data } = await query;
+      if (data) {
+        mensajes = data.map((m: any) => ({
+             titulo: String(m.titulo || ""),
+             contenido: String(m.contenido || ""),
+             created_at: String(m.created_at || "")
+        }));
+      }
+    } catch (e) {
+      console.error("Error fetching messages:", e);
     }
-
-    const { data } = await query;
-    
-    if (data) {
-      mensajes = data.map((m: any) => ({
-           titulo: String(m.titulo || ""),
-           contenido: String(m.contenido || ""),
-           created_at: String(m.created_at || "")
-      }));
-    }
-  } catch (e) {
-    console.error("Error fetching messages:", e);
   }
 
   return (
@@ -323,53 +318,55 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
           </div>
         </div>
 
-        {/* Mensajes del Administrador (solo del curso activo) */}
-        <div className="mb-10">
-          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">Mensajes del Administrador</h2>
-          {mensajes.length === 0 ? (
-            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 p-6 text-sm text-gray-600 dark:text-gray-400 shadow-sm">
-              No hay mensajes para tu curso.
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {mensajes.map((m, idx) => {
-                const isLatest = idx === 0;
-                return (
-                  <article 
-                    key={idx} 
-                    className={`rounded-2xl overflow-hidden border shadow-sm transition-all ${
-                      isLatest 
-                        ? "border-blue-500/50 bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900 ring-1 ring-blue-500/20" 
-                        : "border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 opacity-70 hover:opacity-100"
-                    }`}
-                  >
-                    <div className={`px-6 py-4 border-b text-center ${
-                      isLatest 
-                        ? "bg-blue-600/10 dark:bg-blue-600/20 border-blue-500/20" 
-                        : "bg-gray-50/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-800"
-                    }`}>
-                      <h3 className={`text-xl font-bold mb-1 ${
+        {/* Mensajes del Administrador (solo si hay curso activo) */}
+        {hasActive && (
+          <div className="mb-10">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">Mensajes del Administrador</h2>
+            {mensajes.length === 0 ? (
+              <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 p-6 text-sm text-gray-600 dark:text-gray-400 shadow-sm">
+                No hay mensajes para tu curso.
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {mensajes.map((m, idx) => {
+                  const isLatest = idx === 0;
+                  return (
+                    <article 
+                      key={idx} 
+                      className={`rounded-2xl overflow-hidden border shadow-sm transition-all ${
                         isLatest 
-                          ? "text-blue-700 dark:text-blue-400" 
-                          : "text-gray-900 dark:text-gray-100"
+                          ? "border-blue-500/50 bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900 ring-1 ring-blue-500/20" 
+                          : "border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 opacity-70 hover:opacity-100"
+                      }`}
+                    >
+                      <div className={`px-6 py-4 border-b text-center ${
+                        isLatest 
+                          ? "bg-blue-600/10 dark:bg-blue-600/20 border-blue-500/20" 
+                          : "bg-gray-50/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-800"
                       }`}>
-                        {m.titulo}
-                      </h3>
-                      <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        {new Date(m.created_at).toLocaleString()}
+                        <h3 className={`text-xl font-bold mb-1 ${
+                          isLatest 
+                            ? "text-blue-700 dark:text-blue-400" 
+                            : "text-gray-900 dark:text-gray-100"
+                        }`}>
+                          {m.titulo}
+                        </h3>
+                        <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          {new Date(m.created_at).toLocaleString()}
+                        </div>
                       </div>
-                    </div>
-                    <div className={`px-6 py-6 text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap ${
-                      isLatest ? "text-lg" : "text-base"
-                    }`}>
-                      {m.contenido}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                      <div className={`px-6 py-6 text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap ${
+                        isLatest ? "text-lg" : "text-base"
+                      }`}>
+                        {m.contenido}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {cursosActivos.length > 0 && (
           <div className="mb-12">
@@ -414,7 +411,7 @@ export default async function CursosPage({ searchParams }: { searchParams?: Prom
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
               Cursos Disponibles
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 gap-6">
               {disponibles.map((curso) => (
                 <CursoCard
                   key={curso.id}

@@ -1,9 +1,10 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { PendientesList } from "./PendientesList";
-import { User, Activity, TrendingUp, Users, BookOpen, DollarSign, AlertTriangle, Database, Settings, LogOut, FileText } from "lucide-react";
-import { devInscripciones } from "@/lib/devstore";
+import { User, Activity, TrendingUp, Users, BookOpen, DollarSign, AlertTriangle, Database } from "lucide-react";
+import { devInscripciones, devIntereses, devPerfiles } from "@/lib/devstore";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { cookies } from "next/headers";
 
 export default async function AdminDashboardPage() {
   const supabase = await createSupabaseServerClient();
@@ -31,49 +32,116 @@ export default async function AdminDashboardPage() {
       materialesCargados: 3
   };
 
-  // Fetch pendientes
   let pendientes: any[] = [];
   let dbError: string | null = null;
+
+  // Fetch directly from DB instead of API to avoid network/URL issues
   try {
-      const { data, error } = await client
+    const { data, error } = await client
         .from("cursos_alumnos")
         .select("user_id, curso_id, estado, created_at")
         .eq("estado", "pendiente")
-        .limit(50);
+        .limit(100);
       
-      let combined: any[] = [];
-      if (!error && data) {
-        combined = [...data];
-      } else if (error) {
-        dbError = error.message;
-      }
+    let combined: any[] = [];
+    if (!error && data) {
+      combined = [...(data as any[])];
+    }
 
-      // Intereses
-      const { data: intereses, error: errorIntereses } = await client
-          .from("intereses")
-          .select("*")
-          .limit(50);
-      
-      if (errorIntereses) {
-        dbError = (dbError ? dbError + " | " : "") + "Intereses: " + errorIntereses.message;
-      }
+    // También traer de intereses (solicitudes por email)
+    const { data: intereses, error: errorIntereses } = await client
+      .from("intereses")
+      .select("email, course_id, created_at")
+      .limit(100);
+
+    if (Array.isArray(intereses) && intereses.length > 0 && !errorIntereses) {
+      const mapped = intereses.map((i: any) => ({
+        user_id: i.email,
+        curso_id: i.course_id || i.curso_id,
+        curso_titulo: null,
+        user_email: i.email,
+        estado: "pendiente",
+        source: "intereses",
+        created_at: i.created_at
+      }));
+      combined = [...combined, ...mapped];
+    }
+
+    const unique = combined.filter(
+      (v, i, a) => a.findIndex((t) => t.user_id === v.user_id && t.curso_id === v.curso_id) === i
+    );
+
+    // Enrich with user details
+    const userIds = unique.filter(item => !item.user_id.includes('@')).map(item => item.user_id);
+    const courseIds = unique.map(item => item.curso_id);
+    
+    let userInfo: any = {};
+    let courseInfo: any = {};
+    
+    if (userIds.length > 0) {
+      try {
+        const { data: users } = await client
+          .from('users')
+          .select('id, email, user_metadata->nombre, user_metadata->apellido')
+          .in('id', userIds)
+          .limit(100);
         
-      if (!errorIntereses && intereses) {
-          const interesesMapeados = intereses.map((i: any) => ({
-             user_id: i.email, 
-             email: i.email,
-             curso_id: i.course_id || i.curso_id,
-             estado: "pendiente",
-             created_at: i.created_at,
-             source: "intereses"
-          }));
-          combined = [...combined, ...interesesMapeados];
-      }
+        if (users) {
+          users.forEach((user: any) => {
+            userInfo[user.id] = { email: user.email, nombre: user?.user_metadata?.nombre || "", apellido: user?.user_metadata?.apellido || "" };
+          });
+        }
+      } catch {}
+    }
+    
+    if (courseIds.length > 0) {
+      try {
+        const { data: courses } = await client
+          .from('cursos')
+          .select('id, titulo')
+          .in('id', courseIds)
+          .limit(100);
+        
+        if (courses) {
+          courses.forEach((course: any) => {
+            courseInfo[course.id] = { titulo: course.titulo };
+          });
+        }
+      } catch {}
+    }
 
-      const unique = combined.filter((v, i, a) => a.findIndex(t => t.user_id === v.user_id && t.curso_id === v.curso_id) === i);
-      pendientes = unique;
+    // Enriquecer
+    const enriched = unique.map(item => {
+       const isEmailId = item.user_id.includes("@");
+       const email = item.user_email || (isEmailId ? item.user_id : userInfo[item.user_id]?.email) || item.user_id;
+       
+       let nombre = isEmailId ? "" : (userInfo[item.user_id]?.nombre || "");
+       let apellido = isEmailId ? "" : (userInfo[item.user_id]?.apellido || "");
+       
+       // Intentar buscar nombre en devPerfiles si es email
+       if (isEmailId) {
+         const dev = devPerfiles.find(p => String(p.email).toLowerCase() === String(email).toLowerCase());
+         if (dev) {
+            nombre = dev.nombre || nombre;
+            apellido = dev.apellido || apellido;
+         }
+       }
+
+       return {
+         ...item,
+         email,
+         nombre,
+         apellido,
+         curso_titulo: courseInfo[item.curso_id]?.titulo || item.curso_id
+       };
+    });
+
+    pendientes = enriched;
+    dbError = null;
+
   } catch (e: any) {
-      dbError = e?.message || "Error desconocido";
+    dbError = e?.message || "Error desconocido";
+    pendientes = [];
   }
 
   const actividades = [
@@ -125,11 +193,18 @@ export default async function AdminDashboardPage() {
                     Hay {pendientes.length} inscripción{pendientes.length === 1 ? "" : "es"} pendiente{pendientes.length === 1 ? "" : "s"} de aprobación
                   </div>
                   <div className="mt-2 grid gap-1">
-                    {pendientes.slice(0, 3).map((p, idx) => {
-                      const email = String((p as any)?.email ?? (p as any)?.user_id ?? "Usuario");
+                    {[...pendientes].sort((a, b) => {
+                      const ta = a?.created_at ? new Date(a.created_at).getTime() : 0;
+                      const tb = b?.created_at ? new Date(b.created_at).getTime() : 0;
+                      return tb - ta;
+                    }).slice(0, 3).map((p, idx) => {
+                      const labelName = [p?.nombre, p?.apellido].filter(Boolean).join(" ").trim();
+                      const labelEmail = String(p?.email ?? p?.user_email ?? p?.user_id ?? "Usuario");
+                      const label = labelName || labelEmail;
+                      const cursoLabel = String(p?.curso_titulo ?? p?.curso_id ?? "Curso");
                       return (
                         <div key={idx} className="text-xs text-yellow-100/90 truncate">
-                          {email} — Solicitud pendiente
+                          {label} — {cursoLabel}
                         </div>
                       );
                     })}
@@ -189,7 +264,11 @@ export default async function AdminDashboardPage() {
                 <AlertTriangle className="w-5 h-5 mr-2 inline text-yellow-400" />
                 Inscripciones Pendientes
               </h2>
-              <PendientesList pendientes={pendientes} />
+              <PendientesList pendientes={[...pendientes].sort((a, b) => {
+                const ta = a?.created_at ? new Date(a.created_at).getTime() : 0;
+                const tb = b?.created_at ? new Date(b.created_at).getTime() : 0;
+                return tb - ta;
+              })} />
             </section>
             <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
               <h2 className="text-lg font-semibold text-slate-50 mb-4">

@@ -13,62 +13,65 @@ function isPlaceholderMarkdown(md: string) {
 }
 
 function buildFallbackGlossary(textContent: string) {
-  const words = textContent
-    .toLowerCase()
+  const raw = String(textContent || "");
+  const lower = raw.toLowerCase();
+  const sentences = lower
+    .split(/[\.\!\?\n]+/g)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 20);
+  const tokens = lower
     .replace(/[^a-záéíóúñü\s]/gi, " ")
     .split(/\s+/)
-    .filter((w) => w.length > 3);
+    .filter((w) => w.length > 2);
   const stop = new Set([
-    "para",
-    "como",
-    "donde",
-    "cuando",
-    "entre",
-    "sobre",
-    "pero",
-    "tambien",
-    "esta",
-    "este",
-    "esas",
-    "unos",
-    "unas",
-    "los",
-    "las",
-    "con",
-    "del",
-    "por",
-    "ante",
-    "bajo",
-    "cabe",
-    "contra",
-    "desde",
-    "hacia",
-    "hasta",
-    "segun",
-    "sin",
-    "so",
-    "tras",
-    "que",
-    "solo",
-    "cada",
-    "toda",
-    "todo",
-    "muy",
-    "más",
-    "menos",
-    "puede",
-    "pueden",
-    "se",
+    "para","como","donde","cuando","entre","sobre","pero","tambien","esta","este","esas","unos","unas","los","las","con","del","por","ante","bajo","cabe","contra","desde","hacia","hasta","segun","sin","so","tras","que","solo","cada","toda","todo","muy","más","menos","puede","pueden","se","sus","mis","tus","su","ya","al","el","la","de","y","o","u","es","son","ser","fue","han","hay","en"
   ]);
+  const words = tokens.filter((w) => !stop.has(w));
   const freq: Record<string, number> = {};
-  for (const w of words) {
-    if (!stop.has(w)) freq[w] = (freq[w] || 0) + 1;
+  for (const w of words) freq[w] = (freq[w] || 0) + 1;
+  const bigramFreq: Record<string, number> = {};
+  const trigramFreq: Record<string, number> = {};
+  for (let i = 0; i < words.length - 1; i++) {
+    const a = words[i], b = words[i + 1];
+    if (!stop.has(a) && !stop.has(b)) {
+      const bg = `${a} ${b}`;
+      bigramFreq[bg] = (bigramFreq[bg] || 0) + 1;
+    }
   }
-  const top = Object.entries(freq)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 20)
-    .map(([t]) => t);
-  return `# Glosario\n\n${top.map((t) => `### ${t}\nDefinición general (pendiente de ampliar).`).join("\n\n")}`;
+  for (let i = 0; i < words.length - 2; i++) {
+    const a = words[i], b = words[i + 1], c = words[i + 2];
+    if (!stop.has(a) && !stop.has(b) && !stop.has(c)) {
+      const tg = `${a} ${b} ${c}`;
+      trigramFreq[tg] = (trigramFreq[tg] || 0) + 1;
+    }
+  }
+  const topTrigrams = Object.entries(trigramFreq).filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
+  const topBigrams = Object.entries(bigramFreq).filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
+  const used = new Set<string>();
+  const terms: string[] = [];
+  for (const t of [...topTrigrams, ...topBigrams]) {
+    if (!used.has(t)) {
+      terms.push(t);
+      for (const w of t.split(" ")) used.add(w);
+    }
+  }
+  const topWords = Object.entries(freq).sort((a, b) => b[1] - a[1]).map(([t]) => t).filter((t) => !used.has(t)).slice(0, 12);
+  const finalTerms = [...terms, ...topWords].slice(0, 20);
+  const makeTitle = (t: string) => t.split(" ").map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+  const findContext = (t: string) => {
+    const idx = sentences.findIndex((s) => s.includes(t));
+    if (idx >= 0) return sentences[idx].slice(0, 260);
+    const w = t.split(" ")[0];
+    const j = sentences.findIndex((s) => s.includes(w));
+    if (j >= 0) return sentences[j].slice(0, 260);
+    return "";
+  };
+  const sections = finalTerms.map((t) => {
+    const ctx = findContext(t);
+    const def = ctx ? `Se refiere a: ${ctx}.` : "Concepto clave del material. Explica un aspecto importante del tema tratado.";
+    return `### ${makeTitle(t)}\n${def}`;
+  });
+  return `# Glosario\n\n${sections.join("\n\n")}`;
 }
 
 async function buildOpenAIGlossary(textContent: string) {

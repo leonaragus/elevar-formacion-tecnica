@@ -130,9 +130,18 @@ export default function AjustesPage() {
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({ curso_id: c.id }),
                                   });
-                                  const json = await res.json().catch(() => null as any);
-                                  if (!res.ok || !json?.ok) throw new Error(json?.error || "Error");
-                                  setHasPending(true);
+                              let json: any = null;
+                              try {
+                                json = await res.json();
+                              } catch {}
+                              if (!res.ok) {
+                                if (json?.requiere_datos) {
+                                  window.location.href = `/completar-datos?curso_id=${encodeURIComponent(String(json?.curso_id ?? c.id))}`;
+                                  return;
+                                }
+                                throw new Error(json?.error || "Error");
+                              }
+                              setHasPending(true);
                                 } catch (e) {
                                 } finally {
                                   setSelecting(false);

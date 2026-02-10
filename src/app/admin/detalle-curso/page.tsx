@@ -4,10 +4,10 @@ import { AdminLayout } from "@/components/admin/AdminLayout";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
+type SearchParams = { [key: string]: string | string[] | undefined };
 
 export default async function AdminCursoDetailPage(props: { searchParams: SearchParams }) {
-  const searchParams = await props.searchParams;
+  const searchParams = props.searchParams;
   const id = searchParams.id as string;
   
   if (!id) {

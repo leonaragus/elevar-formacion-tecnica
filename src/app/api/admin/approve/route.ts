@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { devIntereses, upsertInscripcion } from "@/lib/devstore";
+import { devIntereses, upsertInscripcion, devPerfiles } from "@/lib/devstore";
 
 function isAuthorized(req: NextRequest) {
   const token = req.headers.get("x-admin-token") || req.headers.get("X-Admin-Token");
@@ -21,10 +21,14 @@ export async function POST(req: NextRequest) {
     const cursoIdRaw =
       (typeof body?.curso_id === "string" ? body.curso_id : "") ||
       (typeof body?.course_id === "string" ? body.course_id : "");
+    const nombreRaw = typeof body?.nombre === "string" ? body.nombre : "";
+    const apellidoRaw = typeof body?.apellido === "string" ? body.apellido : "";
 
     const email = emailRaw.trim().toLowerCase();
     const user_id = userIdRaw.trim();
     const curso_id = cursoIdRaw.trim();
+    const nombre = nombreRaw.trim();
+    const apellido = apellidoRaw.trim();
 
     if (!curso_id) {
       return NextResponse.json({ ok: false, error: "curso_id requerido" }, { status: 400 });
@@ -65,6 +69,16 @@ export async function POST(req: NextRequest) {
         const idx = devIntereses.findIndex((i) => i.email === resolvedEmail && i.curso_id === curso_id);
         if (idx >= 0) devIntereses.splice(idx, 1);
         await supabase.from("intereses").delete().eq("email", resolvedEmail).eq("course_id", curso_id);
+        // Intentar crear usuario y guardar metadata para legajo
+        try {
+          const createRes = await supabase.auth.admin.createUser({ email: resolvedEmail, email_confirm: true });
+          const createdId = createRes?.data?.user?.id ?? null;
+          const targetNombre = nombre || devPerfiles.find(p => p.email.toLowerCase() === resolvedEmail)?.nombre || "";
+          const targetApellido = apellido || devPerfiles.find(p => p.email.toLowerCase() === resolvedEmail)?.apellido || "";
+          if (createdId && (targetNombre || targetApellido)) {
+            await supabase.auth.admin.updateUserById(createdId, { user_metadata: { nombre: targetNombre, apellido: targetApellido } } as any);
+          }
+        } catch {}
         return NextResponse.json({ ok: true });
       }
       return NextResponse.json({ ok: false, error: "No se pudo resolver user_id" }, { status: 500 });
@@ -98,6 +112,15 @@ export async function POST(req: NextRequest) {
     if (resolvedEmail) {
       await supabase.from("intereses").delete().eq("email", resolvedEmail).eq("course_id", curso_id);
     }
+    
+    // Actualizar metadata del usuario aprobado (para que legajos muestre nombre y apellido)
+    try {
+      const targetNombre = nombre || (resolvedEmail ? (devPerfiles.find(p => p.email.toLowerCase() === resolvedEmail)?.nombre || "") : "");
+      const targetApellido = apellido || (resolvedEmail ? (devPerfiles.find(p => p.email.toLowerCase() === resolvedEmail)?.apellido || "") : "");
+      if (targetNombre || targetApellido) {
+        await supabase.auth.admin.updateUserById(resolvedUserId, { user_metadata: { nombre: targetNombre, apellido: targetApellido } } as any);
+      }
+    } catch {}
 
     return NextResponse.json({ ok: true });
 

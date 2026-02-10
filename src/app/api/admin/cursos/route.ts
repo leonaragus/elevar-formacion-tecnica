@@ -72,20 +72,63 @@ export async function GET(req: NextRequest) {
     }
     const cursosOut = [...cursosList, ...devCursos].map(toClientCurso);
 
-    let alumnosList: Array<{ id: string; curso_id: string }> = [];
+    let alumnosList: Array<{ id: string; curso_id: string; email?: string; nombre?: string; apellido?: string; created_at?: string; estado?: string }> = [];
     if (supabase && !isPublic) {
       console.log("[GET /api/admin/cursos] Consultando inscripciones...");
       const { data: ca, error: errCA } = await supabase
         .from("cursos_alumnos")
-        .select("curso_id, user_id")
+        .select("curso_id, user_id, estado, created_at")
         .limit(1000);
       
       console.log("[GET /api/admin/cursos] Resultado inscripciones:", { dataCount: ca?.length, error: errCA });
-      alumnosList = errCA
+      const base = errCA
         ? []
         : Array.isArray(ca)
-          ? ca.map((r: any) => ({ id: String(r.user_id ?? ""), curso_id: String(r.curso_id ?? "") }))
+          ? ca.map((r: any) => ({
+              id: String(r.user_id ?? ""),
+              curso_id: String(r.curso_id ?? ""),
+              estado: String(r.estado ?? ""),
+              created_at: typeof r.created_at === "string" ? r.created_at : undefined,
+            }))
           : [];
+
+      const userIds = [...new Set(base.map((r) => r.id).filter((v) => v && !String(v).includes("@")))];
+      let usersData: Array<{ id: string; email: string; user_metadata: any; created_at?: string }> = [];
+      try {
+        if (userIds.length > 0) {
+          const { data } = await supabase
+            .from("users")
+            .select("id, email, user_metadata, created_at")
+            .in("id", userIds);
+          usersData = Array.isArray(data) ? (data as any) : [];
+        }
+      } catch {}
+      const userMap = new Map(usersData.map((u: any) => [String(u.id), u]));
+
+      alumnosList = base.map((r) => {
+        const u = userMap.get(r.id);
+        const email =
+          typeof r.id === "string" && r.id.includes("@")
+            ? r.id
+            : (u?.email ? String(u.email) : undefined);
+        const nombre = u?.user_metadata?.nombre || "";
+        const apellido = u?.user_metadata?.apellido || "";
+        const created_at = r.created_at || (u?.created_at ? String(u.created_at) : undefined);
+        return { ...r, email, nombre, apellido, created_at };
+      });
+    } else if (!isPublic) {
+      try {
+        const { devInscripciones } = await import("@/lib/devstore");
+        alumnosList = devInscripciones.map((i) => ({
+          id: String(i.user_id),
+          curso_id: String(i.curso_id),
+          email: String(i.user_id),
+          estado: String(i.estado),
+          nombre: "",
+          apellido: "",
+          created_at: new Date().toISOString(),
+        }));
+      } catch {}
     }
 
     console.log("[GET /api/admin/cursos] Finalizado exitosamente");

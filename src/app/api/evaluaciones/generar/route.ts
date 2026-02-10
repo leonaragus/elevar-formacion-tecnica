@@ -22,30 +22,11 @@ function isAuthorized(req: NextRequest) {
   return hasHeaderOk || hasProfCookie;
 }
 
-async function hasActiveCourse(req: NextRequest): Promise<boolean> {
-  if (req.cookies.get("student_ok")?.value === "1") return true;
-  try {
-    const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user?.id) return false;
-    const { data } = await supabase
-      .from("cursos_alumnos")
-      .select("curso_id")
-      .eq("user_id", user.id)
-      .eq("estado", "activo")
-      .limit(1);
-    return Array.isArray(data) && data.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 export async function POST(req: NextRequest) {
   try {
     const teacher = isAuthorized(req);
     if (!teacher) {
-      const ok = await hasActiveCourse(req);
-      if (!ok) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
     const formData = await req.formData();
     const file = formData.get("file") as File;

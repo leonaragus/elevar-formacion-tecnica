@@ -10,9 +10,9 @@ export const dynamic = "force-dynamic";
 export default async function GlosarioPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ curso_id?: string; name?: string }>;
+  searchParams?: { curso_id?: string; name?: string };
 }) {
-  const params = await searchParams;
+  const params = searchParams;
   const cursoId = String(params?.curso_id || "");
   const name = String(params?.name || "");
 
@@ -110,4 +110,3 @@ export default async function GlosarioPage({
     </MainLayout>
   );
 }
-

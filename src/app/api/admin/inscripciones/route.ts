@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { devInscripciones, upsertInscripcion, deleteInscripcion } from "@/lib/devstore";
+import { devInscripciones, upsertInscripcion, deleteInscripcion, devPerfiles, devIntereses } from "@/lib/devstore";
 
 async function isAuthorized(req: NextRequest) {
   const token = req.headers.get("x-admin-token") || req.headers.get("X-Admin-Token");
@@ -9,6 +9,7 @@ async function isAuthorized(req: NextRequest) {
   const hasHeaderOk = Boolean(token && expected && token === expected);
   const hasProfCookie = req.cookies.get("prof_code_ok")?.value === "1";
   
+  if (process.env.NODE_ENV === "development") return true;
   if (hasHeaderOk || hasProfCookie) return true;
 
   // Check Supabase session
@@ -17,8 +18,28 @@ async function isAuthorized(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     return !!user;
   } catch {
-    return false;
+    // ignore, continue to dev fallback
   }
+
+  // Dev fallback: allow requests coming from Admin UI on same host
+  if (process.env.NODE_ENV === "development") {
+    try {
+      const referer = req.headers.get("referer") || "";
+      const origin = req.headers.get("origin") || "";
+      if (referer) {
+        const u = new URL(referer);
+        const sameHost = u.hostname && req.nextUrl.hostname && u.hostname === req.nextUrl.hostname;
+        const isAdminPath = u.pathname.startsWith("/admin");
+        if (sameHost && isAdminPath) return true;
+      }
+      if (origin) {
+        const o = new URL(origin);
+        const sameHost = o.hostname && req.nextUrl.hostname && o.hostname === req.nextUrl.hostname;
+        if (sameHost) return true;
+      }
+    } catch {}
+  }
+  return false;
 }
 
 async function resolveUserIdFromEmail(supabase: ReturnType<typeof createSupabaseAdminClient>, email: string) {
@@ -52,7 +73,7 @@ export async function GET(req: NextRequest) {
     if (supabase) {
       const { data, error } = await supabase
         .from("cursos_alumnos")
-        .select("user_id, curso_id, estado")
+        .select("user_id, curso_id, estado, created_at")
         .eq("estado", "pendiente")
         .limit(100);
       
@@ -73,7 +94,7 @@ export async function GET(req: NextRequest) {
       // También traer de intereses (solicitudes por email)
       const { data: intereses, error: errorIntereses } = await supabase
         .from("intereses")
-        .select("*, cursos(titulo)") // Traer también el título del curso
+        .select("email, course_id, created_at")
         .limit(100);
       
       let debugInfo = {
@@ -84,14 +105,15 @@ export async function GET(req: NextRequest) {
         hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY
       };
 
-      if (intereses && intereses.length > 0) {
+      if (Array.isArray(intereses) && intereses.length > 0 && !errorIntereses) {
         const mapped = intereses.map((i: any) => ({
           user_id: i.email,
-          curso_id: i.course_id || i.curso_id, // handle potential naming variance
-          curso_titulo: i.cursos?.titulo || "Curso sin título",
+          curso_id: i.course_id || i.curso_id,
+          curso_titulo: null,
           user_email: i.email,
           estado: "pendiente",
-          source: "intereses"
+          source: "intereses",
+          created_at: i.created_at
         }));
         combined = [...combined, ...mapped];
       }
@@ -115,13 +137,13 @@ export async function GET(req: NextRequest) {
         try {
           const { data: users } = await supabase
             .from('users')
-            .select('id, email')
+            .select('id, email, user_metadata->nombre, user_metadata->apellido')
             .in('id', userIds)
             .limit(100);
           
           if (users) {
             users.forEach(user => {
-              userInfo[user.id] = { email: user.email };
+              userInfo[user.id] = { email: user.email, nombre: (user as any)?.user_metadata?.nombre || "", apellido: (user as any)?.user_metadata?.apellido || "" };
             });
           }
         } catch {}
@@ -143,14 +165,62 @@ export async function GET(req: NextRequest) {
         } catch {}
       }
       
-       // Enriquecer los datos con información adicional
-       const enriched = unique.map(item => ({
-         ...item,
-         user_email: item.user_email || userInfo[item.user_id]?.email || item.user_id,
-         curso_titulo: item.curso_titulo || courseInfo[item.curso_id]?.titulo || "Curso sin título"
+       // Fallback local: agregar devInscripciones y devIntereses si existen
+       const devPendIns = devInscripciones
+         .filter(i => i.estado === "pendiente")
+         .map(i => ({
+           user_id: i.user_id,
+           curso_id: i.curso_id,
+           estado: i.estado,
+           user_email: i.user_id.includes("@") ? i.user_id : undefined,
+           created_at: undefined,
+           source: "dev_inscripciones"
+         }));
+       const devPendInter = devIntereses.map(i => ({
+         user_id: i.email,
+         curso_id: i.curso_id,
+         estado: "pendiente",
+         user_email: i.email,
+         created_at: i.when,
+         source: "dev_intereses"
        }));
+       const combinedAll = [...unique, ...devPendIns, ...devPendInter].filter(
+         (v, i, a) => a.findIndex((t) => t.user_id === v.user_id && t.curso_id === v.curso_id) === i
+       );
+
+       // Enriquecer los datos con información adicional, incluyendo nombre y apellido
+       const enriched = combinedAll.map(item => {
+         const isEmailId = item.user_id.includes("@");
+         const email = item.user_email || (isEmailId ? item.user_id : userInfo[item.user_id]?.email) || item.user_id;
+         
+         // Fallback nombre/apellido: users table or devPerfiles por email
+         let nombre = isEmailId ? "" : (userInfo[item.user_id]?.nombre || "");
+         let apellido = isEmailId ? "" : (userInfo[item.user_id]?.apellido || "");
+         if (isEmailId) {
+           const dev = devPerfiles.find(p => String(p.email).toLowerCase() === String(email).toLowerCase());
+           if (dev) {
+             nombre = dev.nombre || "";
+             apellido = dev.apellido || "";
+           }
+         }
+         
+         return {
+           ...item,
+           user_email: email,
+           curso_titulo: item.curso_titulo || courseInfo[item.curso_id]?.titulo || "Curso sin título",
+           nombre,
+           apellido
+         };
+       });
        
-       return NextResponse.json({ ok: true, pendientes: enriched, debug: debugInfo });
+       // Ordenar por fecha de creación (desc) si está disponible
+       const sorted = [...enriched].sort((a, b) => {
+         const ta = a?.created_at ? new Date(a.created_at).getTime() : 0;
+         const tb = b?.created_at ? new Date(b.created_at).getTime() : 0;
+         return tb - ta;
+       });
+       
+       return NextResponse.json({ ok: true, pendientes: sorted, debug: debugInfo });
     } else {
       const pend = devInscripciones.filter((i) => i.estado === "pendiente");
       return NextResponse.json({ ok: true, pendientes: pend });
@@ -237,6 +307,15 @@ export async function DELETE(req: NextRequest) {
       supabase = null;
     }
     if (supabase) {
+      // Intentar borrar de intereses primero (por si es una solicitud pendiente basada en email)
+      try {
+        if (String(user_id).includes("@")) {
+          await supabase.from("intereses").delete().eq("email", user_id).eq("course_id", curso_id);
+          // También intentar con nombre de columna curso_id por si acaso (aunque el esquema usa course_id)
+          await supabase.from("intereses").delete().eq("email", user_id).eq("curso_id", curso_id);
+        }
+      } catch {}
+
       const { error } = await supabase
         .from("cursos_alumnos")
         .delete()
@@ -248,6 +327,8 @@ export async function DELETE(req: NextRequest) {
           msg.includes("invalid api key") ||
           msg.includes("row-level security") ||
           msg.includes("permission denied") ||
+          msg.includes("invalid input syntax") ||
+          msg.includes("uuid") ||
           msg.includes("violates");
         if (shouldFallback) {
           deleteInscripcion(user_id, curso_id);
@@ -255,6 +336,8 @@ export async function DELETE(req: NextRequest) {
         }
         return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
       }
+      // Success in DB, but ensure we also clean up dev store just in case
+      deleteInscripcion(user_id, curso_id);
       return NextResponse.json({ ok: true });
     } else {
       deleteInscripcion(user_id, curso_id);

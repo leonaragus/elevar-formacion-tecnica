@@ -58,9 +58,9 @@ async function resolveActiveCourseTitle(req: NextRequest): Promise<string | null
 
 export async function GET(
   req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  context: { params: { id: string } }
 ) {
-  const { id } = await context.params;
+  const { id } = context.params;
   try {
     const teacher = isAuthorized(req);
     const enforcedCourse = teacher ? null : await resolveActiveCourseTitle(req);

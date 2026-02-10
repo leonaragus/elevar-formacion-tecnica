@@ -180,6 +180,25 @@ export function AdminCursoDetailClient({ id }: AdminCursoDetailClientProps) {
       alert(e?.message || "Error");
     }
   };
+  
+  const deleteStudent = async (studentId: string) => {
+    if (!confirm("¿Eliminar este alumno del curso?")) return;
+    try {
+      setActionLoading(`del:${studentId}`);
+      const url = `/api/admin/alumnos?id=${encodeURIComponent(studentId)}&curso_id=${encodeURIComponent(id)}`;
+      const res = await fetch(url, { method: "DELETE" });
+      const json = await res.json().catch(() => null as any);
+      if (!res.ok || !json?.success) {
+        alert(json?.error || "No se pudo eliminar al alumno del curso");
+        return;
+      }
+      setStudents((prev) => prev.filter((s: any) => !(String(s?.id) === String(studentId) && String(s?.curso_id) === String(id))));
+    } catch (e: any) {
+      alert(e?.message || "Error");
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   if (loading) {
     return <div className="p-8 text-slate-400">Cargando detalles del curso...</div>;
@@ -321,12 +340,13 @@ export function AdminCursoDetailClient({ id }: AdminCursoDetailClientProps) {
                     <th className="p-4 font-medium">Email</th>
                     <th className="p-4 font-medium">Estado</th>
                     <th className="p-4 font-medium">Fecha Inscripción</th>
+                    <th className="p-4 font-medium">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {students.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="p-8 text-center text-slate-400">
+                      <td colSpan={5} className="p-8 text-center text-slate-400">
                         No hay alumnos inscriptos aún.
                       </td>
                     </tr>
@@ -344,6 +364,16 @@ export function AdminCursoDetailClient({ id }: AdminCursoDetailClientProps) {
                         </td>
                         <td className="p-4 text-slate-400">
                           {new Date(student.created_at || Date.now()).toLocaleDateString()}
+                        </td>
+                        <td className="p-4">
+                          <button
+                            onClick={() => deleteStudent(String(student.id))}
+                            disabled={actionLoading === `del:${student.id}`}
+                            className="p-2 rounded-lg hover:bg-red-500/10 text-slate-400 hover:text-red-300 transition-colors"
+                            title="Eliminar del curso"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -396,7 +426,16 @@ export function AdminCursoDetailClient({ id }: AdminCursoDetailClientProps) {
                 <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
                   <div className="text-sm font-medium text-slate-100 mb-2">Glosario generado</div>
                   {lastUploadGlossaryError && (
-                    <div className="text-xs text-amber-300 mb-2 break-words">{lastUploadGlossaryError}</div>
+                    <div className="text-xs text-amber-300 mb-2 break-words">
+                      {(() => {
+                        const msg = String(lastUploadGlossaryError || "");
+                        const low = msg.toLowerCase();
+                        if (low.includes("invalid api key") || low.includes("permission denied") || low.includes("row-level security")) {
+                          return "No se pudo generar glosario: falta Service Role Key o permisos insuficientes.";
+                        }
+                        return msg;
+                      })()}
+                    </div>
                   )}
                   {lastUploadGlossaryUrl ? (
                     <div className="flex flex-wrap gap-2">

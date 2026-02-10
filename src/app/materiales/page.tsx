@@ -7,8 +7,8 @@ import { ensureGlossaryForMaterial } from "@/lib/glossary/ensureGlossary";
 import { cookies } from "next/headers";
 import Link from "next/link";
 
-export default async function MaterialesPage({ searchParams }: { searchParams?: Promise<{ curso_id?: string }> }) {
-  const resolvedSearchParams = await searchParams;
+export default async function MaterialesPage({ searchParams }: { searchParams?: { curso_id?: string } }) {
+  const resolvedSearchParams = searchParams;
   const cookieStore = await cookies();
   const studentOk = cookieStore.get("student_ok")?.value === "1";
   const studentCourseId = cookieStore.get("student_course_id")?.value;
@@ -162,24 +162,40 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
          sortBy: { column: "created_at", order: "desc" }
        });
        if (glossList && !glossErr) {
-         glosarios = glossList
-           .filter(f => f.name.endsWith('.md'))
-           .map((file) => {
-           const publicUrl = adminClient.storage.from("materiales").getPublicUrl(`${selectedId}/glosarios/${file.name}`).data.publicUrl;
+         const isPlaceholderMd = (t: string) => {
+           const m = t.toLowerCase();
+           return (
+             m.includes("no se pudo extraer texto del pdf") ||
+             m.includes("no se pudo extraer texto del archivo") ||
+             m.includes("posible pdf escaneado") ||
+             m.includes("se requiere ocr")
+           );
+         };
+         const filtered: Array<{ id: string; titulo: string; url: string; fecha: string; tamaño: string }> = [];
+         for (const file of glossList.filter((f) => String(f?.name || "").endsWith(".md"))) {
+           const key = `${selectedId}/glosarios/${file.name}`;
+           const dl = await adminClient.storage.from("materiales").download(key);
+           if (dl?.error) continue;
+           const blob = dl.data as Blob;
+           const text = await blob.text();
+           if (!text.trim()) continue;
+           if (isPlaceholderMd(text)) continue;
+           const publicUrl = adminClient.storage.from("materiales").getPublicUrl(key).data.publicUrl;
            const baseName = file.name.replace(/\.md$/i, "");
            const nameParts = baseName.split('-');
            let displayName = baseName;
            if (nameParts.length > 1 && /^\d+$/.test(nameParts[0])) {
              displayName = nameParts.slice(1).join('-');
            }
-           return {
+           filtered.push({
              id: file.id || file.name,
              titulo: displayName,
              url: publicUrl,
              fecha: file.created_at ? new Date(file.created_at).toLocaleDateString() : "Hoy",
              tamaño: file.metadata?.size ? `${(file.metadata.size/1024).toFixed(1)} KB` : "N/A",
-           };
-         });
+           });
+         }
+         glosarios = filtered;
        }
 
       const existingGloss = new Map<string, number>();
@@ -216,6 +232,20 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
           if (r.status === "fulfilled" && r.value?.ok && r.value?.glossaryUrl) {
             const gUrl = r.value.glossaryUrl;
             const gName = String(gUrl).split("/").pop() || "glosario.md";
+            const key = `${selectedId}/glosarios/${gName}`;
+            const dl = await adminClient.storage.from(bucket).download(key);
+            if (dl?.error) continue;
+            const text = await (dl.data as Blob).text();
+            const isPlaceholderMd = (t: string) => {
+              const m = t.toLowerCase();
+              return (
+                m.includes("no se pudo extraer texto del pdf") ||
+                m.includes("no se pudo extraer texto del archivo") ||
+                m.includes("posible pdf escaneado") ||
+                m.includes("se requiere ocr")
+              );
+            };
+            if (!text.trim() || isPlaceholderMd(text)) continue;
             const baseName = gName.replace(/\.md$/i, "");
             const parts = baseName.split("-");
             let displayName = baseName;
@@ -396,23 +426,32 @@ export default async function MaterialesPage({ searchParams }: { searchParams?: 
                     ))
                 )}
 
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 mt-6">
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Glosarios</h2>
+                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 mt-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Glosarios</h2>
                   {glosarios.length === 0 ? (
                     <div className="text-sm text-gray-600 dark:text-gray-400">Aún no hay glosarios generados para este curso.</div>
                   ) : (
-                    glosarios.map((g) => (
-                      <div key={g.id} className="flex items-start justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg mb-3">
-                        <div>
-                          <div className="font-medium text-gray-900 dark:text-white break-all">{g.titulo}</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">{g.fecha} · {g.tamaño}</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {glosarios.map((g) => (
+                        <div key={g.id} className="group rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-gray-900 p-5 hover:shadow-lg hover:border-blue-500/40 transition-all">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
+                                <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                              </div>
+                              <div>
+                                <div className="text-base font-semibold text-gray-900 dark:text-white break-all">{g.titulo}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">{g.fecha} · {g.tamaño}</div>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Link href={`/glosario?url=${encodeURIComponent(String(g.url || ""))}`} className="px-3 py-2 rounded-lg text-sm bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-900 dark:text-white">Ver</Link>
+                              <Link href={`${g.url}?download=1`} target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg text-sm bg-blue-600 hover:bg-blue-700 text-white">Descargar</Link>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex gap-2">
-                          <Link href={`/glosario?url=${encodeURIComponent(String(g.url || ""))}`} className="px-3 py-2 rounded-lg text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-white">Ver</Link>
-                          <Link href={`${g.url}?download=1`} target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg text-sm bg-blue-600 hover:bg-blue-700 text-white">Descargar</Link>
-                        </div>
-                      </div>
-                    ))
+                      ))}
+                    </div>
                   )}
                 </div>
                 </div>

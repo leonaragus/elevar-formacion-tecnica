@@ -723,10 +723,21 @@ import Link from "next/link";
                    <div className="p-6 text-sm text-slate-400">No hay solicitudes pendientes.</div>
                  ) : (
                    <div className="divide-y divide-white/10">
-                     {pendientes.map((p) => (
+                     {[...pendientes].sort((a, b) => {
+                       const ta = a?.created_at ? new Date(a.created_at).getTime() : 0;
+                       const tb = b?.created_at ? new Date(b.created_at).getTime() : 0;
+                       return tb - ta;
+                     }).map((p) => (
                        <div key={`${p.user_id}:${p.curso_id}`} className="p-4 flex items-center justify-between">
                          <div className="text-sm text-slate-200">
-                           <div>Email: <span className="font-mono">{p.user_email || p.user_id}</span></div>
+                           <div>
+                             Alumno: <span className="font-medium">
+                               {[p as any]?.nombre || ""} {[p as any]?.apellido || ""}
+                             </span>
+                           </div>
+                           <div className="text-xs">
+                             Email: <span className="font-mono">{p.user_email || p.user_id}</span>
+                           </div>
                            <div>Curso: <span className="font-medium">{p.curso_titulo || p.curso_id}</span></div>
                          </div>
                          <div className="flex items-center gap-2">
