@@ -1,94 +1,62 @@
-# 🚀 Deploy a Vercel
+# Guía de Configuración para Vercel
 
-## Opción 1: Deploy desde la terminal (Recomendado)
+## 🚀 Deploy Completado
 
-### Paso 1: Instalar Vercel CLI
-```bash
-npm install -g vercel
-```
+La aplicación ha sido desplegada exitosamente en Vercel.
 
-### Paso 2: Ejecutar deploy
-```bash
-# Deploy con variables de entorno desde tu archivo .env.local
-vercel --prod --yes \
-  --env NEXT_PUBLIC_SUPABASE_URL=https://rgmauuzwzsoaytsulgwg.supabase.co \
-  --env NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnbWF1dXp3enNvYXl0c3VsZ3dnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MTYxOTUsImV4cCI6MjA4NTA5MjE5NX0.4uASiQ4dpPvU0ylcKzv9wd0XVoSREnjwKGwtQbvhV3Q \
-  --env SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnbWF1dXp3enNvYXl0c3VsZ3dnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTUxNjE5NSwiZXhwIjoyMDg1MDkyMTk1fQ.JsjmpLw9YjV4fePuwnmBM8ARM84PFJck_Nfr4yjvICA \
-  --env ADMIN_TOKEN=admin-test-token-12345 \
-  --env NEXT_PUBLIC_VAPID_PUBLIC_KEY=BHy9d1h8CN1k4F1uq_ekLiBn7Xg6SKnwA4W08ZdcGYLQPJ4K0Sm_RQBLjVwMWWF1ihkM7HF_E_6zTknhtViBtBo \
-  --env VAPID_PRIVATE_KEY=tKWeLoHbM_ZyInYcsgTJV_9ulU1owGNtR3tSsCtXjhU \
-  --env VAPID_SUBJECT=mailto:admin@tuinstituto.com
-```
+### 📍 URLs Importantes:
+- **Aplicación Principal**: https://supabase-next14-dl74na6am-academia-elevars-projects.vercel.app
+- **Panel de Control**: https://supabase-next14-dl74na6am-academia-elevars-projects.vercel.app/admin
+- **Test de Notificaciones**: https://supabase-next14-dl74na6am-academia-elevars-projects.vercel.app/test-calendario-notificaciones
 
-## Opción 2: Deploy desde GitHub
+## ⚙️ Configuración de Variables de Entorno
 
-### Paso 1: Subir a GitHub
-```bash
-git add .
-git commit -m "feat: agregar sistema de notificaciones push"
-git push origin main
-```
+Para que todo funcione correctamente, necesitas configurar estas variables de entorno en el dashboard de Vercel:
 
-### Paso 2: Conectar con Vercel
-1. Ve a [vercel.com](https://vercel.com)
-2. Importa tu repositorio de GitHub
-3. Configura las variables de entorno (usa las mismas que están arriba)
-4. Deploy automáticamente
+### Variables Requeridas:
 
-## Opción 3: Usar el script de deploy
-```bash
-# En Windows (PowerShell)
-./deploy-vercel.ps1
+1. **Supabase Configuration:**
+   - `NEXT_PUBLIC_SUPABASE_URL`: Tu URL de Supabase
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Tu clave anónima de Supabase
+   - `SUPABASE_SERVICE_ROLE_KEY`: Tu clave de servicio de Supabase
 
-# En macOS/Linux
-chmod +x deploy-vercel.sh
-./deploy-vercel.sh
-```
+2. **Authentication:**
+   - `ADMIN_TOKEN`: Token secreto para funciones de administrador
 
-## 📋 Variables de entorno necesarias
+3. **Push Notifications (VAPID):**
+   - `NEXT_PUBLIC_VAPID_PUBLIC_KEY`: Clave pública VAPID
+   - `VAPID_PRIVATE_KEY`: Clave privada VAPID
+   - `VAPID_SUBJECT`: Formato mailto:tu-email@ejemplo.com
 
-| Variable | Valor actual | Descripción |
-|----------|--------------|-------------|
-| NEXT_PUBLIC_SUPABASE_URL | https://rgmauuzwzsoaytsulgwg.supabase.co | URL de tu proyecto Supabase |
-| NEXT_PUBLIC_SUPABASE_ANON_KEY | eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... | Clave pública de Supabase |
-| SUPABASE_SERVICE_ROLE_KEY | eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... | Clave de servicio para operaciones admin |
-| ADMIN_TOKEN | admin-test-token-12345 | Token para API de administrador |
-| NEXT_PUBLIC_VAPID_PUBLIC_KEY | BHy9d1h8CN1k4F1uq_ekLiBn7Xg6SKnwA4W08ZdcGYL... | Clave pública para notificaciones push |
-| VAPID_PRIVATE_KEY | tKWeLoHbM_ZyInYcsgTJV_9ulU1owGNtR3tSsCtXjhU | Clave privada para notificaciones push |
-| VAPID_SUBJECT | mailto:admin@tuinstituto.com | Email del administrador |
+4. **Cron Jobs:**
+   - `CRON_API_KEY`: Clave secreta para ejecutar tareas programadas
 
-## 🧪 Para probar las notificaciones push
+## 🧪 Pruebas Recomendadas
 
-Una vez deployado, puedes probar en:
-- **Página de pruebas**: `https://tu-app.vercel.app/push-test`
-- **Interfaz de alumno**: `https://tu-app.vercel.app/cursos`
+1. **Test de Notificaciones Push**:
+   - Visita: `/test-calendario-notificaciones`
+   - Selecciona un curso, alumno y entrega
+   - Prueba envío individual y masivo
 
-## 🔧 Comandos útiles
+2. **Calendario Admin**:
+   - Visita: `/admin/calendario`
+   - Crea/editar/elimina fechas de entrega
 
-```bash
-# Ver logs en tiempo real
-vercel logs
+3. **Vista Alumno**:
+   - Visita: `/calendario`
+   - Verifica que se muestran las fechas correctamente
 
-# Ver información del deploy
-vercel inspect
+## 📋 Pasos Siguientes
 
-# Actualizar variables de entorno
-vercel env add NEXT_PUBLIC_SUPABASE_URL production
+1. Configura las variables de entorno en Vercel
+2. Prueba las notificaciones push
+3. Configura tareas programadas para recordatorios automáticos
+4. Verifica que los alumnos reciban las notificaciones
 
-# Forzar redeploy
-vercel --force
-```
+## 🔧 Solución de Problemas
 
-## 🚨 Notas importantes
-
-1. **HTTPS**: Las notificaciones push solo funcionan en HTTPS, Vercel lo proporciona automáticamente
-2. **Service Worker**: El archivo `sw.js` se servirá automáticamente desde `/sw.js`
-3. **Variables de entorno**: Asegúrate de configurarlas en el dashboard de Vercel también
-4. **Dominio**: Vercel te dará un dominio `.vercel.app` automáticamente
-
-## 📞 Soporte
-
-Si tienes problemas con el deploy:
-1. Verifica que el build local funcione: `npm run build`
-2. Revisa los logs en el dashboard de Vercel
-3. Asegúrate de que todas las variables de entorno estén configuradas
+Si las notificaciones no funcionan:
+1. Verifica que las claves VAPID sean correctas
+2. Asegúrate de que el Service Worker esté registrado
+3. Comprueba los permisos de notificación en el navegador
+4. Revisa la consola del navegador para errores

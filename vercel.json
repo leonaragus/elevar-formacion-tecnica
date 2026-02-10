@@ -4,12 +4,13 @@
   "installCommand": "npm install",
   "framework": "nextjs",
   "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "@next_public_supabase_url",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@next_public_supabase_anon_key",
-    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key",
-    "ADMIN_TOKEN": "@admin_token",
-    "NEXT_PUBLIC_VAPID_PUBLIC_KEY": "@next_public_vapid_public_key",
-    "VAPID_PRIVATE_KEY": "@vapid_private_key",
-    "VAPID_SUBJECT": "@vapid_subject"
+    "NEXT_PUBLIC_SUPABASE_URL": "${NEXT_PUBLIC_SUPABASE_URL}",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "${NEXT_PUBLIC_SUPABASE_ANON_KEY}",
+    "SUPABASE_SERVICE_ROLE_KEY": "${SUPABASE_SERVICE_ROLE_KEY}",
+    "ADMIN_TOKEN": "${ADMIN_TOKEN}",
+    "NEXT_PUBLIC_VAPID_PUBLIC_KEY": "${NEXT_PUBLIC_VAPID_PUBLIC_KEY}",
+    "VAPID_PRIVATE_KEY": "${VAPID_PRIVATE_KEY}",
+    "VAPID_SUBJECT": "${VAPID_SUBJECT}",
+    "CRON_API_KEY": "${CRON_API_KEY}"
   }
 }

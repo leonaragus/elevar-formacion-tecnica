@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { format, isAfter, isBefore, addDays, startOfDay } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { es } from 'date-fns/locale/es';
 
 interface FechaEntrega {
   id: string;
