@@ -1,8 +1,10 @@
 import { MainLayout } from "@/components/MainLayout";
-import { BookOpen } from "lucide-react";
+import { BookOpen, Bell } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import CursoCard from "@/components/CursoCard";
+import PushNotificationToggle from "@/components/PushNotificationToggle";
+import NotificationHistory from "@/components/NotificationHistory";
 import { cookies, headers } from "next/headers";
 import { devInscripciones, devCursos } from "@/lib/devstore";
 
@@ -319,7 +321,37 @@ export default async function CursosPage(props: { searchParams: Promise<{ solici
           </div>
         </div>
 
-        {/* Mensajes del Administrador (solo si hay curso activo) */}
+        {/* Gestión de Notificaciones (solo si hay curso activo) */}
+        {hasActive && (
+          <div className="mb-10">
+            <div className="flex items-center gap-3 mb-4">
+              <Bell className="w-6 h-6 text-blue-600" />
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Notificaciones</h2>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Gestionar notificaciones por curso</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {cursosActivos.map((curso) => (
+                  <div key={curso.id} className="flex flex-col gap-2">
+                    <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {curso.titulo}
+                    </div>
+                    <PushNotificationToggle 
+                      cursoId={curso.id}
+                      className="w-full"
+                    />
+                  </div>
+                ))}
+              </div>
+             </div>
+             <div className="mt-6">
+               <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3">Historial de notificaciones</h4>
+               <NotificationHistory limit={5} />
+             </div>
+           </div>
+         )}
+ 
+          {/* Mensajes del Administrador (solo si hay curso activo) */}
         {hasActive && (
           <div className="mb-10">
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">Mensajes del Administrador</h2>

@@ -1,0 +1,30 @@
+# ✅ CONFIGURACIÓN COMPLETA DEL .ENV.LOCAL
+# ======================================
+# COPIA TODO EL CONTENIDO DE ABAJO Y PÉGALO EN TU ARCHIVO .env.local
+
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=https://rgmauuzwzsoaytsulgwg.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnbWF1dXp3enNvYXl0c3VsZ3dnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MTYxOTUsImV4cCI6MjA4NTA5MjE5NX0.4uASiQ4dpPvU0ylcKzv9wd0XVoSREnjwKGwtQbvhV3Q
+
+# Service Role Key (for admin operations)
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnbWF1dXp3enNvYXl0c3VsZ3dnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTUxNjE5NSwiZXhwIjoyMDg1MDkyMTk1fQ.JsjmpLw9YjV4fePuwnmBM8ARM84PFJck_Nfr4yjvICA
+
+# Optional: JWT Secret (if needed for custom auth)
+# SUPABASE_JWT_SECRET=your_jwt_secret_here
+
+# Admin API Token for script access
+ADMIN_TOKEN=admin-test-token-12345
+
+# 🔔 PUSH NOTIFICATION VAPID KEYS (CLAVES PARA NOTIFICACIONES PUSH)
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=BHy9d1h8CN1k4F1uq_ekLiBn7Xg6SKnwA4W08ZdcGYLQPJ4K0Sm_RQBLjVwMWWF1ihkM7HF_E_6zTknhtViBtBo
+VAPID_PRIVATE_KEY=tKWeLoHbM_ZyInYcsgTJV_9ulU1owGNtR3tSsCtXjhU
+VAPID_SUBJECT=mailto:admin@tuinstituto.com
+
+# 📋 INSTRUCCIONES:
+# 1. Abre tu archivo .env.local en el editor
+# 2. Selecciona todo el contenido (Ctrl+A)
+# 3. Copia el contenido de arriba
+# 4. Pégalo en tu archivo .env.local
+# 5. Guarda el archivo
+# 6. Reinicia tu servidor: npm run dev
+# 7. Prueba en: http://localhost:3000/push-test

@@ -3,6 +3,7 @@
 import { Clock, Users, Star } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import PushNotificationToggle from "./PushNotificationToggle";
 
 type CursoRow = {
   id: string;
@@ -85,6 +86,10 @@ export default function CursoCard({ curso, professor, estadoCurso, isAdminView =
               <div className="w-full text-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">
                 Bienvenido al cursado de {curso.titulo}
               </div>
+              <PushNotificationToggle 
+                cursoId={curso.id}
+                className="w-full"
+              />
               <Link
                 href="/perfil"
                 className="w-full text-center px-4 py-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"

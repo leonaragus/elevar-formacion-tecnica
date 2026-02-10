@@ -10,7 +10,8 @@ import {
   DollarSign, 
   Settings,
   X,
-  LogOut
+  LogOut,
+  Calendar
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -30,6 +31,12 @@ const menuItems = [
     href: "/admin/cursos",
     icon: Database,
     description: "Gestión de cursos"
+  },
+  {
+    name: "Calendario",
+    href: "/admin/calendario",
+    icon: Calendar,
+    description: "Fechas de entrega"
   },
   {
     name: "Mensajes",

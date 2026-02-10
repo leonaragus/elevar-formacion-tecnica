@@ -9,7 +9,8 @@ import {
   CreditCard, 
   Settings,
   BarChart2,
-  X
+  X,
+  Calendar
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -33,6 +34,12 @@ const menuItems = [
     href: "/cursos",
     icon: BookOpen,
     description: "Mis cursos activos"
+  },
+  {
+    name: "Calendario",
+    href: "/calendario",
+    icon: Calendar,
+    description: "Fechas de entrega"
   },
   {
     name: "Materiales",

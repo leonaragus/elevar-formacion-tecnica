@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { notifyCourseSubscribers } from "@/lib/push-notifications/utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -118,6 +119,25 @@ export async function POST(req: NextRequest) {
     });
     
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+
+    // Send push notifications to course subscribers if there's a course ID
+    if (cursoId) {
+      try {
+        // Run notification sending in background to not block the response
+        notifyCourseSubscribers({
+          titulo,
+          contenido,
+          curso_id: cursoId
+        }).then(result => {
+          console.log("Push notification result:", result);
+        }).catch(error => {
+          console.error("Error sending push notifications:", error);
+        });
+      } catch (notificationError) {
+        console.error("Failed to send push notifications:", notificationError);
+        // Don't fail the main request if push notifications fail
+      }
+    }
 
     if (isForm) {
       const redirectUrl = new URL(returnTo || "/admin/dashboard?ok=published", req.url);

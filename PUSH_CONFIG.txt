@@ -1,0 +1,15 @@
+# ======================================
+# CONFIGURACIÓN PARA NOTIFICACIONES PUSH
+# ======================================
+# Agrega estas líneas a tu archivo .env.local:
+
+# Push Notification VAPID Keys (Generadas: $(date))
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=BHy9d1h8CN1k4F1uq_ekLiBn7Xg6SKnwA4W08ZdcGYLQPJ4K0Sm_RQBLjVwMWWF1ihkM7HF_E_6zTknhtViBtBo
+VAPID_PRIVATE_KEY=tKWeLoHbM_ZyInYcsgTJV_9ulU1owGNtR3tSsCtXjhU
+VAPID_SUBJECT=mailto:admin@tuinstituto.com
+
+# Instrucciones:
+# 1. Copia las 3 líneas de arriba
+# 2. Pégualas al final de tu archivo .env.local
+# 3. Guarda el archivo .env.local
+# 4. Reinicia tu servidor de desarrollo (npm run dev)
