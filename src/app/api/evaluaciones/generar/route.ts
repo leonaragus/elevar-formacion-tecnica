@@ -68,9 +68,26 @@ export async function POST(req: NextRequest) {
           console.error("Fallback extraction failed", e);
       }
       
+      // Fallback avanzado con OCR (Tesseract) si el texto sigue siendo insuficiente
+      if (!pdfText || pdfText.length < 50) {
+        console.log("Intentando OCR con Tesseract...");
+        try {
+          const { createWorker } = await import("tesseract.js");
+          const worker = await createWorker('spa');
+          const { data: { text } } = await worker.recognize(buffer);
+          await worker.terminate();
+          
+          if (text && text.trim().length > 10) {
+             pdfText = text;
+          }
+        } catch (ocrErr) {
+          console.error("Error OCR:", ocrErr);
+        }
+      }
+
       if (!pdfText || pdfText.length < 50) {
           return NextResponse.json(
-            { error: "No se pudo extraer texto del PDF. Asegúrese de que no sea una imagen escaneada." },
+            { error: "No se pudo extraer texto del PDF ni siquiera con OCR. Intente con otro archivo." },
             { status: 400 }
           );
       }
@@ -79,8 +96,8 @@ export async function POST(req: NextRequest) {
     // Limpieza básica de texto extraído
     pdfText = pdfText.replace(/\s+/g, " ").trim();
 
-    // Validar longitud del texto
-    if (pdfText.length < 50) {
+    // Validar longitud del texto (Modo permisivo: > 20 caracteres)
+    if (pdfText.length < 20) {
       return NextResponse.json(
         { error: "El PDF no contiene suficiente texto legible (posiblemente escaneado)." },
         { status: 400 }
