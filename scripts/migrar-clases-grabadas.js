@@ -108,7 +108,7 @@ export async function ejecutarMigracionesClasesGrabadas() {
     return { success: true, message: 'Migraciones ejecutadas correctamente' };
   } catch (error) {
     console.error('Error:', error);
-    return { success: false, error: (error as Error).message };
+    return { success: false, error: (error && typeof error === 'object' && 'message' in error) ? error.message : String(error) };
   }
 }
 

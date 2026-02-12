@@ -178,3 +178,19 @@ ORDER BY orden DESC;
 
 -- Ver estadísticas por curso
 SELECT * FROM estadisticas_clases_grabadas;
+
+-- ============================================
+-- 🗂️ COMENTARIOS DE CLASES
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS clases_comentarios (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  clase_id UUID NOT NULL REFERENCES clases_grabadas(id) ON DELETE CASCADE,
+  author_id UUID NULL,
+  author_email TEXT NULL,
+  texto TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_comentarios_clase_id ON clases_comentarios(clase_id);
+CREATE INDEX IF NOT EXISTS idx_comentarios_created_at ON clases_comentarios(created_at DESC);

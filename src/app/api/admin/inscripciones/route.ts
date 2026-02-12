@@ -7,37 +7,18 @@ async function isAuthorized(req: NextRequest) {
   const token = req.headers.get("x-admin-token") || req.headers.get("X-Admin-Token");
   const expected = process.env.ADMIN_TOKEN;
   const hasHeaderOk = Boolean(token && expected && token === expected);
-  const hasProfCookie = req.cookies.get("prof_code_ok")?.value === "1";
   
   if (process.env.NODE_ENV === "development") return true;
-  if (hasHeaderOk || hasProfCookie) return true;
+  if (hasHeaderOk) return true;
 
   // Check Supabase session
   try {
     const supabase = await createSupabaseServerClient();
     const { data: { user } } = await supabase.auth.getUser();
+    // Solo permitir si hay sesión activa (admin gestiona desde el panel)
     return !!user;
   } catch {
     // ignore, continue to dev fallback
-  }
-
-  // Dev fallback: allow requests coming from Admin UI on same host
-  if (process.env.NODE_ENV === "development") {
-    try {
-      const referer = req.headers.get("referer") || "";
-      const origin = req.headers.get("origin") || "";
-      if (referer) {
-        const u = new URL(referer);
-        const sameHost = u.hostname && req.nextUrl.hostname && u.hostname === req.nextUrl.hostname;
-        const isAdminPath = u.pathname.startsWith("/admin");
-        if (sameHost && isAdminPath) return true;
-      }
-      if (origin) {
-        const o = new URL(origin);
-        const sameHost = o.hostname && req.nextUrl.hostname && o.hostname === req.nextUrl.hostname;
-        if (sameHost) return true;
-      }
-    } catch {}
   }
   return false;
 }
@@ -45,18 +26,36 @@ async function isAuthorized(req: NextRequest) {
 async function resolveUserIdFromEmail(supabase: ReturnType<typeof createSupabaseAdminClient>, email: string) {
   const normalized = String(email || "").trim().toLowerCase();
   if (!normalized || !normalized.includes("@")) return null;
-  const created = await supabase.auth.admin
-    .createUser({ email: normalized, email_confirm: true })
-    .catch(() => null as any);
-  const createdId = created?.data?.user?.id ?? null;
-  if (createdId) return String(createdId);
 
-  const listed = await supabase.auth.admin
-    .listUsers({ page: 1, perPage: 1000 })
-    .catch(() => null as any);
-  const users = Array.isArray(listed?.data?.users) ? listed.data.users : [];
-  const found = users.find((u: any) => String(u?.email || "").toLowerCase() === normalized);
-  return typeof found?.id === "string" ? found.id : null;
+  // 1. Try to find existing user by email
+  // We'll use a larger perPage and potentially loop if needed, 
+  // but for now 1000 should be enough for most cases.
+  const { data: { users }, error: listError } = await supabase.auth.admin.listUsers({
+    perPage: 1000
+  });
+  
+  if (!listError && users) {
+    const found = users.find(u => u.email?.toLowerCase() === normalized);
+    if (found) return found.id;
+  }
+
+  // 2. Try to create user if not found
+  const { data: created, error: createError } = await supabase.auth.admin.createUser({
+    email: normalized,
+    email_confirm: true,
+    user_metadata: { source: 'admin_approval' }
+  });
+
+  if (created?.user?.id) return created.user.id;
+
+  // 3. If creation failed, it might be because the user already exists but was not in the first 1000.
+  // We can try to list again with a different page if we suspect there are more than 1000 users.
+  // For now, let's just log the error.
+  if (createError) {
+    console.error(`Error creating user ${normalized}:`, createError);
+  }
+
+  return null;
 }
 
 export async function GET(req: NextRequest) {
@@ -64,169 +63,109 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
   try {
-    let supabase: ReturnType<typeof createSupabaseAdminClient> | null = null;
-    try {
-      supabase = createSupabaseAdminClient();
-    } catch {
-      supabase = null;
+    const supabase = createSupabaseAdminClient();
+    
+    // 1. Cursos Alumnos Pendientes
+    const { data: cursosAlumnos, error: caErr } = await supabase
+      .from("cursos_alumnos")
+      .select("user_id, curso_id, estado, created_at")
+      .eq("estado", "pendiente")
+      .limit(200);
+
+    // 2. Intereses (solicitudes por email)
+    const { data: intereses, error: intErr } = await supabase
+      .from("intereses")
+      .select("email, course_id, curso_id, created_at")
+      .limit(200);
+
+    type PendingInscripcion = {
+      user_id: string;
+      curso_id: string;
+      estado: string;
+      user_email?: string | null;
+      curso_titulo?: string | null;
+      source?: string;
+      created_at?: string;
+    };
+
+    let combined: PendingInscripcion[] = [];
+
+    if (cursosAlumnos) {
+      combined = [...cursosAlumnos.map(c => ({ ...c, source: 'db_insc' }))];
     }
-    if (supabase) {
-      const { data, error } = await supabase
-        .from("cursos_alumnos")
-        .select("user_id, curso_id, estado, created_at")
-        .eq("estado", "pendiente")
-        .limit(100);
-      
-      type PendingInscripcion = {
-        user_id: string;
-        curso_id: string;
-        estado: string;
-        user_email?: string | null;
-        curso_titulo?: string | null;
-        source?: string;
-      };
 
-      let combined: PendingInscripcion[] = [];
-      if (!error && data) {
-        combined = [...(data as any[])];
-      }
-
-      // También traer de intereses (solicitudes por email)
-      const { data: intereses, error: errorIntereses } = await supabase
-        .from("intereses")
-        .select("email, course_id, created_at")
-        .limit(100);
-      
-      let debugInfo = {
-        interesesCount: intereses?.length || 0,
-        interesesError: errorIntereses?.message || null,
-        cursosAlumnosCount: data?.length || 0,
-        cursosAlumnosError: error?.message || null,
-        hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY
-      };
-
-      if (Array.isArray(intereses) && intereses.length > 0 && !errorIntereses) {
-        const mapped = intereses.map((i: any) => ({
-          user_id: i.email,
-          curso_id: i.course_id || i.curso_id,
-          curso_titulo: null,
-          user_email: i.email,
-          estado: "pendiente",
-          source: "intereses",
-          created_at: i.created_at
-        }));
-        combined = [...combined, ...mapped];
-      }
-
-      if (error && combined.length === 0) {
-        // ... (código existente de fallback) ...
-      }
-      
-      const unique = combined.filter(
-        (v, i, a) => a.findIndex((t) => t.user_id === v.user_id && t.curso_id === v.curso_id) === i
-      );
-
-      // Obtener información adicional de usuarios y cursos
-      const userIds = unique.filter(item => !item.user_id.includes('@')).map(item => item.user_id);
-      const courseIds = unique.map(item => item.curso_id);
-      
-      let userInfo: any = {};
-      let courseInfo: any = {};
-      
-      if (userIds.length > 0) {
-        try {
-          const { data: users } = await supabase
-            .from('users')
-            .select('id, email, user_metadata->nombre, user_metadata->apellido')
-            .in('id', userIds)
-            .limit(100);
-          
-          if (users) {
-            users.forEach(user => {
-              userInfo[user.id] = { email: user.email, nombre: (user as any)?.user_metadata?.nombre || "", apellido: (user as any)?.user_metadata?.apellido || "" };
-            });
-          }
-        } catch {}
-      }
-      
-      if (courseIds.length > 0) {
-        try {
-          const { data: courses } = await supabase
-            .from('cursos')
-            .select('id, titulo')
-            .in('id', courseIds)
-            .limit(100);
-          
-          if (courses) {
-            courses.forEach(course => {
-              courseInfo[course.id] = { titulo: course.titulo };
-            });
-          }
-        } catch {}
-      }
-      
-       // Fallback local: agregar devInscripciones y devIntereses si existen
-       const devPendIns = devInscripciones
-         .filter(i => i.estado === "pendiente")
-         .map(i => ({
-           user_id: i.user_id,
-           curso_id: i.curso_id,
-           estado: i.estado,
-           user_email: i.user_id.includes("@") ? i.user_id : undefined,
-           created_at: undefined,
-           source: "dev_inscripciones"
-         }));
-       const devPendInter = devIntereses.map(i => ({
-         user_id: i.email,
-         curso_id: i.curso_id,
-         estado: "pendiente",
-         user_email: i.email,
-         created_at: i.when,
-         source: "dev_intereses"
-       }));
-       const combinedAll = [...unique, ...devPendIns, ...devPendInter].filter(
-         (v, i, a) => a.findIndex((t) => t.user_id === v.user_id && t.curso_id === v.curso_id) === i
-       );
-
-       // Enriquecer los datos con información adicional, incluyendo nombre y apellido
-       const enriched = combinedAll.map(item => {
-         const isEmailId = item.user_id.includes("@");
-         const email = item.user_email || (isEmailId ? item.user_id : userInfo[item.user_id]?.email) || item.user_id;
-         
-         // Fallback nombre/apellido: users table or devPerfiles por email
-         let nombre = isEmailId ? "" : (userInfo[item.user_id]?.nombre || "");
-         let apellido = isEmailId ? "" : (userInfo[item.user_id]?.apellido || "");
-         if (isEmailId) {
-           const dev = devPerfiles.find(p => String(p.email).toLowerCase() === String(email).toLowerCase());
-           if (dev) {
-             nombre = dev.nombre || "";
-             apellido = dev.apellido || "";
-           }
-         }
-         
-         return {
-           ...item,
-           user_email: email,
-           curso_titulo: item.curso_titulo || courseInfo[item.curso_id]?.titulo || "Curso sin título",
-           nombre,
-           apellido
-         };
-       });
-       
-       // Ordenar por fecha de creación (desc) si está disponible
-       const sorted = [...enriched].sort((a, b) => {
-         const ta = a?.created_at ? new Date(a.created_at).getTime() : 0;
-         const tb = b?.created_at ? new Date(b.created_at).getTime() : 0;
-         return tb - ta;
-       });
-       
-       return NextResponse.json({ ok: true, pendientes: sorted, debug: debugInfo });
-    } else {
-      const pend = devInscripciones.filter((i) => i.estado === "pendiente");
-      return NextResponse.json({ ok: true, pendientes: pend });
+    if (intereses) {
+      const mapped = intereses.map((i: any) => ({
+        user_id: i.email,
+        curso_id: i.course_id || i.curso_id,
+        user_email: i.email,
+        estado: "pendiente",
+        source: "intereses",
+        created_at: i.created_at
+      }));
+      combined = [...combined, ...mapped];
     }
+
+    // Unique by user and course
+    const unique = combined.filter(
+      (v, i, a) => a.findIndex((t) => t.user_id === v.user_id && t.curso_id === v.curso_id) === i
+    );
+
+    // Get User and Course info
+    const userIds = unique.filter(item => !item.user_id.includes('@')).map(item => item.user_id);
+    const emails = unique.filter(item => item.user_id.includes('@')).map(item => item.user_id);
+    const courseIds = unique.map(item => item.curso_id);
+
+    let userInfo: Record<string, any> = {};
+    let courseInfo: Record<string, any> = {};
+
+    if (userIds.length > 0) {
+      const { data: users } = await supabase.auth.admin.listUsers();
+      if (users) {
+        users.forEach(u => {
+          if (userIds.includes(u.id)) {
+            userInfo[u.id] = { 
+              email: u.email, 
+              nombre: u.user_metadata?.nombre || "", 
+              apellido: u.user_metadata?.apellido || "" 
+            };
+          }
+        });
+      }
+    }
+
+    if (courseIds.length > 0) {
+      const { data: courses } = await supabase.from('cursos').select('id, titulo').in('id', courseIds);
+      if (courses) {
+        courses.forEach(c => { courseInfo[c.id] = c.titulo; });
+      }
+    }
+
+    const enriched = unique.map(item => {
+      const isEmail = item.user_id.includes('@');
+      const email = isEmail ? item.user_id : (userInfo[item.user_id]?.email || item.user_id);
+      const nombre = isEmail ? "" : (userInfo[item.user_id]?.nombre || "");
+      const apellido = isEmail ? "" : (userInfo[item.user_id]?.apellido || "");
+      
+      return {
+        ...item,
+        user_email: email,
+        curso_titulo: courseInfo[item.curso_id] || item.curso_id,
+        nombre,
+        apellido
+      };
+    });
+
+    const sorted = enriched.sort((a, b) => {
+      const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return tb - ta;
+    });
+
+    return NextResponse.json({ ok: true, pendientes: sorted });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || "Error" }, { status: 500 });
+    console.error("Error in Admin Inscriptions GET:", e);
+    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
 }
 
@@ -239,55 +178,45 @@ export async function POST(req: NextRequest) {
     if (!user_id || !curso_id) {
       return NextResponse.json({ ok: false, error: "Parámetros requeridos" }, { status: 400 });
     }
-    const userIdOrEmail = String(user_id).trim();
-    const courseId = String(curso_id).trim();
-    if (!courseId) {
-      return NextResponse.json({ ok: false, error: "curso_id requerido" }, { status: 400 });
-    }
-    let supabase: ReturnType<typeof createSupabaseAdminClient> | null = null;
-    try {
-      supabase = createSupabaseAdminClient();
-    } catch {
-      supabase = null;
-    }
-    if (supabase) {
-      let resolvedUserId = userIdOrEmail;
-      const looksLikeEmail = userIdOrEmail.includes("@");
-      if (looksLikeEmail) {
-        const resolved = await resolveUserIdFromEmail(supabase, userIdOrEmail);
-        if (resolved) resolvedUserId = resolved;
+
+    const supabase = createSupabaseAdminClient();
+    let targetUserId = String(user_id).trim();
+    const isEmail = targetUserId.includes("@");
+
+    if (isEmail) {
+      const resolved = await resolveUserIdFromEmail(supabase, targetUserId);
+      if (!resolved) {
+        return NextResponse.json({ ok: false, error: "No se pudo encontrar o crear el usuario para ese email" }, { status: 400 });
       }
-      const { error } = await supabase
-        .from("cursos_alumnos")
-        .upsert({ user_id: resolvedUserId, curso_id: courseId, estado: "activo" }, { onConflict: "curso_id,user_id" });
-      if (error) {
-        const msg = String(error.message || "").toLowerCase();
-        const shouldFallback =
-          msg.includes("invalid api key") ||
-          msg.includes("row-level security") ||
-          msg.includes("permission denied") ||
-          msg.includes("violates");
-        if (shouldFallback) {
-          upsertInscripcion(userIdOrEmail, courseId, "activo");
-          return NextResponse.json({ ok: true });
-        }
-        return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
-      }
-      if (looksLikeEmail) {
-        try {
-          await supabase.from("intereses").delete().eq("email", userIdOrEmail.toLowerCase()).eq("course_id", courseId);
-        } catch {}
-        try {
-          await supabase.from("intereses").delete().eq("email", userIdOrEmail.toLowerCase()).eq("curso_id", courseId);
-        } catch {}
-      }
-      return NextResponse.json({ ok: true });
-    } else {
-      upsertInscripcion(userIdOrEmail, courseId, "activo");
-      return NextResponse.json({ ok: true });
+      targetUserId = resolved;
     }
+
+    // 1. Upsert into cursos_alumnos as active
+    const { error: upsertError } = await supabase
+      .from("cursos_alumnos")
+      .upsert({ 
+        user_id: targetUserId, 
+        curso_id, 
+        estado: "activo",
+        updated_at: new Date().toISOString()
+      }, { onConflict: "curso_id,user_id" });
+
+    if (upsertError) {
+      console.error("Error upserting inscription:", upsertError);
+      return NextResponse.json({ ok: false, error: upsertError.message }, { status: 400 });
+    }
+
+    // 2. Clean up from intereses if it was an email-based request
+    if (isEmail) {
+      const email = String(user_id).toLowerCase();
+      await supabase.from("intereses").delete().eq("email", email).eq("course_id", curso_id);
+      await supabase.from("intereses").delete().eq("email", email).eq("curso_id", curso_id);
+    }
+
+    return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || "Error" }, { status: 500 });
+    console.error("Error in Admin Inscriptions POST:", e);
+    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
 }
 
@@ -300,50 +229,36 @@ export async function DELETE(req: NextRequest) {
     if (!user_id || !curso_id) {
       return NextResponse.json({ ok: false, error: "Parámetros requeridos" }, { status: 400 });
     }
-    let supabase: ReturnType<typeof createSupabaseAdminClient> | null = null;
-    try {
-      supabase = createSupabaseAdminClient();
-    } catch {
-      supabase = null;
-    }
-    if (supabase) {
-      // Intentar borrar de intereses primero (por si es una solicitud pendiente basada en email)
-      try {
-        if (String(user_id).includes("@")) {
-          await supabase.from("intereses").delete().eq("email", user_id).eq("course_id", curso_id);
-          // También intentar con nombre de columna curso_id por si acaso (aunque el esquema usa course_id)
-          await supabase.from("intereses").delete().eq("email", user_id).eq("curso_id", curso_id);
-        }
-      } catch {}
+    const supabase = createSupabaseAdminClient();
+    let targetUserId = String(user_id).trim();
+    const isEmail = targetUserId.includes("@");
 
-      const { error } = await supabase
-        .from("cursos_alumnos")
-        .delete()
-        .eq("user_id", user_id)
-        .eq("curso_id", curso_id);
-      if (error) {
-        const msg = String(error.message || "").toLowerCase();
-        const shouldFallback =
-          msg.includes("invalid api key") ||
-          msg.includes("row-level security") ||
-          msg.includes("permission denied") ||
-          msg.includes("invalid input syntax") ||
-          msg.includes("uuid") ||
-          msg.includes("violates");
-        if (shouldFallback) {
-          deleteInscripcion(user_id, curso_id);
-          return NextResponse.json({ ok: true });
-        }
-        return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
-      }
-      // Success in DB, but ensure we also clean up dev store just in case
-      deleteInscripcion(user_id, curso_id);
-      return NextResponse.json({ ok: true });
-    } else {
-      deleteInscripcion(user_id, curso_id);
-      return NextResponse.json({ ok: true });
+    // 1. Try to delete from intereses (if it was an email-based request)
+    if (isEmail) {
+      const email = targetUserId.toLowerCase();
+      await supabase.from("intereses").delete().eq("email", email).eq("course_id", curso_id);
+      await supabase.from("intereses").delete().eq("email", email).eq("curso_id", curso_id);
+      
+      // Also resolve email to user_id for deleting from cursos_alumnos
+      const resolved = await resolveUserIdFromEmail(supabase, email);
+      if (resolved) targetUserId = resolved;
     }
+
+    // 2. Delete from cursos_alumnos
+    const { error } = await supabase
+      .from("cursos_alumnos")
+      .delete()
+      .eq("user_id", targetUserId)
+      .eq("curso_id", curso_id);
+
+    if (error) {
+      console.error("Error deleting inscription:", error);
+      return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || "Error" }, { status: 500 });
+    console.error("Error in Admin Inscriptions DELETE:", e);
+    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
 }

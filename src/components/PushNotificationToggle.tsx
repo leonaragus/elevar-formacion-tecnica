@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Bell, BellOff } from 'lucide-react';
+import { Bell, BellOff, Loader2 } from 'lucide-react';
+import { 
+  subscribeToCourseNotifications, 
+  unsubscribeFromCourseNotifications, 
+  isPushNotificationSupported,
+  getNotificationPermission,
+  initializePushNotifications
+} from '@/lib/push-notifications/service';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 interface PushNotificationToggleProps {
   cursoId: string;
@@ -12,21 +20,43 @@ export default function PushNotificationToggle({ cursoId, className = "" }: Push
   const [isEnabled, setIsEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<'checking' | 'subscribed' | 'unsubscribed' | 'unsupported'>('checking');
+  const supabase = createSupabaseBrowserClient();
 
   useEffect(() => {
-    checkSubscriptionStatus();
+    const init = async () => {
+      const supported = isPushNotificationSupported();
+      if (!supported) {
+        setSubscriptionStatus('unsupported');
+        return;
+      }
+      
+      try {
+        // Asegurarse de que el Service Worker esté registrado con un timeout para evitar bloqueos
+        const initPromise = initializePushNotifications();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout al inicializar Service Worker')), 5000)
+        );
+        
+        await Promise.race([initPromise, timeoutPromise]);
+        await checkSubscriptionStatus();
+      } catch (error) {
+        console.error('Error initializing notifications:', error);
+        // No bloqueamos todo si falla la inicialización, pero marcamos como desuscrito por ahora
+        setSubscriptionStatus('unsubscribed');
+      }
+    };
+    
+    init();
   }, [cursoId]);
 
   const checkSubscriptionStatus = async () => {
-    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-      setSubscriptionStatus('unsupported');
-      return;
-    }
-
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch(`/api/notifications/status?curso_id=${cursoId}`, {
         headers: {
-          'Authorization': `Bearer ${document.cookie.includes('sb-access-token') ? 'token' : ''}`
+          'Authorization': token ? `Bearer ${token}` : ''
         }
       });
 
@@ -48,60 +78,42 @@ export default function PushNotificationToggle({ cursoId, className = "" }: Push
 
     setIsLoading(true);
     try {
-      if (isEnabled) {
-        // Unsubscribe
-        const response = await fetch('/api/notifications/unsubscribe', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${document.cookie.includes('sb-access-token') ? 'token' : ''}`
-          },
-          body: JSON.stringify({ curso_id: cursoId })
-        });
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-        if (response.ok) {
+      if (!token) {
+        throw new Error('Debes iniciar sesión para activar las notificaciones');
+      }
+
+      if (isEnabled) {
+        // Unsubscribe usando el servicio
+        const success = await unsubscribeFromCourseNotifications(cursoId, token);
+
+        if (success) {
           setIsEnabled(false);
           setSubscriptionStatus('unsubscribed');
+        } else {
+          throw new Error('No se pudo cancelar la suscripción');
         }
       } else {
-        // Subscribe
-        if (Notification.permission === 'default') {
-          const permission = await Notification.requestPermission();
-          if (permission !== 'granted') {
-            alert('Se requiere permiso para recibir notificaciones');
-            setIsLoading(false);
-            return;
-          }
-        }
+        // Subscribe usando el servicio
+        const subscription = await subscribeToCourseNotifications(cursoId, token);
 
-        if (Notification.permission === 'granted') {
-          const registration = await navigator.serviceWorker.ready;
-          const subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-          });
-
-          const response = await fetch('/api/notifications/subscribe', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${document.cookie.includes('sb-access-token') ? 'token' : ''}`
-            },
-            body: JSON.stringify({
-              curso_id: cursoId,
-              subscription: subscription.toJSON()
-            })
-          });
-
-          if (response.ok) {
-            setIsEnabled(true);
-            setSubscriptionStatus('subscribed');
+        if (subscription) {
+          setIsEnabled(true);
+          setSubscriptionStatus('subscribed');
+        } else {
+          // Si el permiso fue denegado, el servicio devuelve null
+          if (getNotificationPermission() === 'denied') {
+            alert('Has denegado el permiso para notificaciones. Por favor, actívalo en la configuración de tu navegador.');
+          } else {
+            throw new Error('No se pudo activar la suscripción. Verifica que tu navegador soporte notificaciones push.');
           }
         }
       }
     } catch (error) {
       console.error('Error toggling subscription:', error);
-      alert('Error al cambiar el estado de suscripción');
+      alert(error instanceof Error ? error.message : 'Error al cambiar el estado de suscripción');
     } finally {
       setIsLoading(false);
     }
@@ -109,18 +121,18 @@ export default function PushNotificationToggle({ cursoId, className = "" }: Push
 
   if (subscriptionStatus === 'unsupported') {
     return (
-      <div className={`flex items-center p-3 bg-gray-100 rounded-lg ${className}`}>
+      <div className={`flex items-center p-3 bg-gray-100 dark:bg-gray-800 rounded-lg ${className}`}>
         <BellOff className="w-5 h-5 text-gray-500 mr-2" />
-        <span className="text-sm text-gray-600">Las notificaciones no son soportadas en este navegador</span>
+        <span className="text-sm text-gray-600 dark:text-gray-400">Notificaciones no soportadas</span>
       </div>
     );
   }
 
   if (subscriptionStatus === 'checking') {
     return (
-      <div className={`flex items-center p-3 bg-gray-100 rounded-lg ${className}`}>
-        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
-        <span className="text-sm text-gray-600">Verificando estado...</span>
+      <div className={`flex items-center p-3 bg-gray-100 dark:bg-gray-800 rounded-lg ${className}`}>
+        <Loader2 className="w-5 h-5 animate-spin text-blue-600 mr-2" />
+        <span className="text-sm text-gray-600 dark:text-gray-400">Verificando...</span>
       </div>
     );
   }
@@ -129,14 +141,14 @@ export default function PushNotificationToggle({ cursoId, className = "" }: Push
     <button
       onClick={handleToggle}
       disabled={isLoading}
-      className={`flex items-center p-3 rounded-lg transition-colors ${
+      className={`flex items-center p-3 rounded-lg transition-colors w-full sm:w-auto justify-center ${
         isEnabled
-          ? 'bg-green-100 text-green-800 hover:bg-green-200'
-          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          ? 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400'
+          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
       } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
     >
       {isLoading ? (
-        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-current mr-2"></div>
+        <Loader2 className="w-5 h-5 animate-spin mr-2" />
       ) : isEnabled ? (
         <Bell className="w-5 h-5 mr-2" />
       ) : (

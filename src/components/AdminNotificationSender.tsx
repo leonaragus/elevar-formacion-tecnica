@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Send, Users, Bell, AlertCircle, CheckCircle } from "lucide-react";
+import { Send, Users, Bell, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 interface Curso {
   id: string;
@@ -24,6 +25,7 @@ export default function AdminNotificationSender() {
   const [isSending, setIsSending] = useState<boolean>(false);
   const [stats, setStats] = useState<NotificationStats | null>(null);
   const [lastSent, setLastSent] = useState<string>("");
+  const supabase = createSupabaseBrowserClient();
 
   useEffect(() => {
     loadCursos();
@@ -32,9 +34,12 @@ export default function AdminNotificationSender() {
 
   const loadCursos = async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch('/api/cursos', {
         headers: {
-          'Authorization': `Bearer ${document.cookie.includes('sb-access-token') ? 'token' : ''}`
+          'Authorization': token ? `Bearer ${token}` : ''
         }
       });
       
@@ -49,9 +54,12 @@ export default function AdminNotificationSender() {
 
   const loadStats = async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch('/api/admin/notifications/stats', {
         headers: {
-          'Authorization': `Bearer ${document.cookie.includes('sb-access-token') ? 'token' : ''}`
+          'Authorization': token ? `Bearer ${token}` : ''
         }
       });
       
@@ -73,11 +81,18 @@ export default function AdminNotificationSender() {
     setIsSending(true);
     
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        throw new Error("No tienes una sesión administrativa válida");
+      }
+
       const response = await fetch('/api/notifications/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${document.cookie.includes('sb-access-token') ? 'token' : ''}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           curso_id: selectedCurso,
@@ -100,7 +115,7 @@ export default function AdminNotificationSender() {
       }
     } catch (error) {
       console.error("Error sending notification:", error);
-      alert("Error al enviar la notificación");
+      alert(error instanceof Error ? error.message : "Error al enviar la notificación");
     } finally {
       setIsSending(false);
     }

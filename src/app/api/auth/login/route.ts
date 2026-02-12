@@ -61,11 +61,15 @@ export async function POST(req: NextRequest) {
     let foundUserId: string | null = null;
     if (admin) {
       try {
-        const listed = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-        const users = Array.isArray(listed?.data?.users) ? listed.data.users : [];
-        const found = users.find((u: any) => String(u?.email || "").toLowerCase() === normalizedEmail);
-        foundUserId = typeof found?.id === "string" ? found.id : null;
-      } catch {
+        const { data: { users }, error: listError } = await admin.auth.admin.listUsers({
+          perPage: 1000
+        });
+        if (!listError && users) {
+          const found = users.find(u => u.email?.toLowerCase() === normalizedEmail);
+          foundUserId = found?.id || null;
+        }
+      } catch (err) {
+        console.error("Error listing users in login:", err);
         foundUserId = null;
       }
     }

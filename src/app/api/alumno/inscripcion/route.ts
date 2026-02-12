@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { devIntereses, devInscripciones, upsertInscripcion, upsertPerfil } from "@/lib/devstore";
+import { devInscripciones, devIntereses } from "@/lib/devstore";
 
 export async function POST(req: NextRequest) {
   // Para inscripciones, no requerimos autenticación - el admin aprobará después
@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
       
       const nombre = currentUser?.user_metadata?.nombre || '';
       const apellido = currentUser?.user_metadata?.apellido || '';
+      const email = currentUser?.email || '';
       
       // Si falta nombre o apellido, redirigir a página de completar datos
       if (!nombre.trim() || !apellido.trim()) {
@@ -60,40 +61,69 @@ export async function POST(req: NextRequest) {
           curso_id: curso_id 
         }, { status: 400 });
       }
+
+      let wroteDb = false;
+      let dbError: string | null = null;
+
       if (supabaseAdmin) {
+        // Intentar insertar en intereses como respaldo siempre
+        try {
+          console.log(`Intentando insertar en intereses (auth) para ${email} curso ${curso_id}`);
+          const { error: intErr } = await supabaseAdmin
+            .from("intereses")
+            .insert({ 
+              email, 
+              course_id: curso_id, 
+              created_at: new Date().toISOString() 
+            });
+          if (intErr) {
+            console.error("Error al insertar en intereses (auth):", intErr);
+            dbError = intErr.message;
+          } else {
+            console.log("Inserción exitosa en intereses (auth)");
+            wroteDb = true;
+          }
+        } catch (e: any) {
+          console.error("Excepción al insertar en intereses (auth):", e);
+          dbError = e.message;
+        }
+
+        console.log(`Intentando upsert en cursos_alumnos para user_id ${user.id} curso ${curso_id}`);
         const { error } = await supabaseAdmin
           .from("cursos_alumnos")
-          .upsert({ user_id: user.id, curso_id, estado: "pendiente" }, { onConflict: "curso_id,user_id" });
-        if (error) {
-          const msg = String(error.message || "").toLowerCase();
-          const shouldFallback =
-            msg.includes("invalid api key") ||
-            msg.includes("row-level security") ||
-            msg.includes("permission denied") ||
-            msg.includes("violates");
-          if (shouldFallback) {
-            upsertInscripcion(user.id, curso_id, "pendiente");
-            if (isForm) {
-              return NextResponse.redirect(new URL("/cursos?solicitud=pendiente", req.url));
-            }
-            return NextResponse.json({ ok: true, pendiente: true });
-          }
-          if (isForm) {
-            return NextResponse.redirect(new URL(`/cursos?error=${encodeURIComponent(error.message || "Error")}`, req.url));
-          }
-          return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+          .upsert(
+            { user_id: user.id, curso_id, estado: "pendiente" }, 
+            { onConflict: "curso_id,user_id", ignoreDuplicates: false }
+          );
+        
+        if (!error) {
+          console.log("Upsert exitoso en cursos_alumnos");
+          wroteDb = true;
+        } else {
+          console.error("Error al insertar en cursos_alumnos (auth):", error);
+          dbError = error.message;
         }
-        if (isForm) {
-          return NextResponse.redirect(new URL("/cursos?solicitud=pendiente", req.url));
-        }
-        return NextResponse.json({ ok: true });
-      } else {
-        upsertInscripcion(user.id, curso_id, "pendiente");
-        if (isForm) {
-          return NextResponse.redirect(new URL("/cursos?solicitud=pendiente", req.url));
-        }
-        return NextResponse.json({ ok: true, pendiente: true });
       }
+
+      if (!wroteDb) {
+        // Fallback a devstore si falla la DB real
+        console.warn("Usando fallback de devstore para inscripción (auth). Error DB:", dbError);
+        try {
+          devInscripciones.push({
+            user_id: user.id,
+            curso_id: curso_id,
+            estado: "pendiente"
+          });
+          wroteDb = true;
+        } catch (e) {
+          console.error("Error crítico en fallback devstore (auth):", e);
+        }
+      }
+
+      if (isForm) {
+        return NextResponse.redirect(new URL("/cursos?solicitud=pendiente", req.url));
+      }
+      return NextResponse.json({ ok: true, pendiente: true });
     } else {
       const email = req.cookies.get("student_email")?.value || "";
       if (!email) {
@@ -114,8 +144,6 @@ export async function POST(req: NextRequest) {
         if (isForm) {
           return NextResponse.redirect(new URL(`/completar-datos?curso_id=${curso_id}`, req.url));
         }
-        // Force redirect to completar-datos for json requests too (client should handle it)
-        // Or return specific error to trigger client side form
         return NextResponse.json({ 
           ok: false, 
           error: "Datos incompletos", 
@@ -123,40 +151,46 @@ export async function POST(req: NextRequest) {
           curso_id: curso_id 
         }, { status: 400 });
       }
-      try {
-        upsertPerfil(email, { nombre, apellido });
-      } catch {}
+
       let wroteDb = false;
+      let dbError: string | null = null;
+
       if (supabaseAdmin) {
         try {
           // Intentar insertar en intereses
-          // Usamos insert para evitar problemas con onConflict si la constraint tiene otro nombre
+          console.log(`Intentando insertar en intereses (unauth) para ${email} curso ${curso_id}`);
           const { error: errInt } = await supabaseAdmin
             .from("intereses")
             .insert({ email, course_id: curso_id, created_at: new Date().toISOString() });
-          
-          // Si no hubo error, o el error es de duplicado (violates unique constraint), consideramos escrito
+
           if (!errInt || errInt.message.includes("duplicate") || errInt.message.includes("violates")) {
+             console.log("Inserción exitosa o ya existía en intereses (unauth)");       
              wroteDb = true;
+          } else {
+             console.error("Error al insertar en intereses (unauth):", errInt);
+             dbError = errInt.message;
           }
-        } catch {}
-        
-        try {
-          // Intentar insertar en cursos_alumnos (puede fallar si user_id es uuid y pasamos email)
-          const { error: errIns } = await supabaseAdmin
-            .from("cursos_alumnos")
-            .upsert({ user_id: email, curso_id, estado: "pendiente" }, { onConflict: "curso_id,user_id" });
-          if (!errIns) wroteDb = true;
-        } catch {}
+        } catch (e: any) {
+          console.error("Excepción al insertar en intereses (unauth):", e);
+          dbError = e.message;
+        }
       }
+
       if (!wroteDb) {
+        // Fallback a devstore si falla la DB real
+        console.warn("Usando fallback de devstore para intereses (unauth). Error DB:", dbError);
         try {
-          devIntereses.push({ email, curso_id: String(curso_id), when: new Date().toISOString() });
-        } catch {}
-        try {
-          upsertInscripcion(email, String(curso_id), "pendiente");
-        } catch {}
+          devIntereses.push({
+            email,
+            curso_id: curso_id,
+            when: new Date().toISOString()
+          });
+          wroteDb = true;
+        } catch (e) {
+          console.error("Error crítico en fallback devstore (unauth):", e);
+        }
       }
+
       if (isForm) {
         return NextResponse.redirect(new URL("/auth?error=pendiente", req.url));
       }

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import AdminNotificationSender from "@/components/AdminNotificationSender";
 import { Shield, ArrowLeft, Bell, Users, TrendingUp } from "lucide-react";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 interface NotificationStats {
   total_courses: number;
@@ -17,6 +18,7 @@ export default function AdminNotificacionesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<NotificationStats | null>(null);
   const router = useRouter();
+  const supabase = createSupabaseBrowserClient();
 
   useEffect(() => {
     checkAdminStatus();
@@ -25,10 +27,11 @@ export default function AdminNotificacionesPage() {
 
   const checkAdminStatus = async () => {
     try {
-      const token = document.cookie.split('; ').find(row => row.startsWith('sb-access-token'))?.split('=')[1];
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       
       if (!token) {
-        router.push('/login');
+        router.push('/auth');
         return;
       }
 
@@ -40,17 +43,19 @@ export default function AdminNotificacionesPage() {
 
       if (response.ok) {
         const data = await response.json();
-        if (data.user?.role !== 'admin' && data.user?.role !== 'instructor') {
+        // Permitir admin, instructor o profesor (según tu lógica de negocio)
+        const role = data.user?.role || data.user?.user_metadata?.role;
+        if (role !== 'admin' && role !== 'instructor' && role !== 'profesor') {
           router.push('/');
           return;
         }
         setIsAdmin(true);
       } else {
-        router.push('/login');
+        router.push('/auth');
       }
     } catch (error) {
       console.error("Error checking admin status:", error);
-      router.push('/login');
+      router.push('/auth');
     } finally {
       setIsLoading(false);
     }
@@ -58,7 +63,8 @@ export default function AdminNotificacionesPage() {
 
   const loadStats = async () => {
     try {
-      const token = document.cookie.split('; ').find(row => row.startsWith('sb-access-token'))?.split('=')[1];
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       
       if (!token) return;
 

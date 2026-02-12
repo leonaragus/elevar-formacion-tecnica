@@ -152,13 +152,16 @@ function PagosClient({
   );
 }
 
-export default async function PagosPage(props: { searchParams: Promise<{ curso_id?: string }> }) {
-  const searchParams = await props.searchParams;
+export default function PagosPage(props: { searchParams: any }) {
+  const searchParams = props.searchParams;
   const { user } = useAuth();
   const router = useRouter();
-  const [selectedId, setSelectedId] = useState(() => {
-    return String(searchParams?.curso_id ?? "") || readLocalStorage("student_course_id") || "";
-  });
+  const [selectedId, setSelectedId] = useState("");
+  
+  useEffect(() => {
+    const sId = String(searchParams?.curso_id ?? "") || readLocalStorage("student_course_id") || "";
+    setSelectedId(sId);
+  }, [searchParams]);
   const [loading, setLoading] = useState(false);
   const [estadoCursoSeleccionado, setEstadoCursoSeleccionado] = useState<"ninguno" | "pendiente" | "activo">("ninguno");
   const [mesesTotal, setMesesTotal] = useState(0);

@@ -6,7 +6,7 @@ import CursoCard from "@/components/CursoCard";
 import PushNotificationToggle from "@/components/PushNotificationToggle";
 import NotificationHistory from "@/components/NotificationHistory";
 import { cookies, headers } from "next/headers";
-import { devInscripciones, devCursos } from "@/lib/devstore";
+import { devInscripciones, devIntereses } from "@/lib/devstore";
 
 export const dynamic = "force-dynamic";
 
@@ -111,14 +111,6 @@ export default async function CursosPage(props: { searchParams: Promise<{ solici
             enrolledIds = [...new Set([...activeCourseIds, ...pendingCourseIds])];
           }
         } catch {}
-      } else {
-        const rows = devInscripciones.filter((i) => i.user_id === studentEmail);
-        activeCourseIds = rows.filter((r) => r.estado === "activo").map((r) => r.curso_id);
-        const pendingFromInsc = rows.filter((r) => r.estado === "pendiente").map((r) => r.curso_id);
-        hasActive = activeCourseIds.length > 0;
-        hasPending = hasPending || pendingFromInsc.length > 0;
-        pendingCourseIds = [...new Set([...pendingCourseIds, ...pendingFromInsc])];
-        enrolledIds = [...new Set([...activeCourseIds, ...pendingCourseIds])];
       }
     }
 
@@ -132,6 +124,18 @@ export default async function CursosPage(props: { searchParams: Promise<{ solici
         if (!enrolledIds.includes(studentCourseId)) {
           enrolledIds.push(studentCourseId);
         }
+    }
+
+    // Devstore Fallback (Cookies/Student)
+    if (studentEmail) {
+      const devInsc = devIntereses.filter(i => i.email === studentEmail);
+      devInsc.forEach(i => {
+        if (!enrolledIds.includes(i.curso_id)) {
+          enrolledIds.push(i.curso_id);
+          pendingCourseIds.push(i.curso_id);
+          hasPending = true;
+        }
+      });
     }
   }
 
@@ -171,52 +175,76 @@ export default async function CursosPage(props: { searchParams: Promise<{ solici
         pendingCourseIds = [...new Set([...pendingCourseIds, ...pendingFromInsc])];
         enrolledIds = [...new Set([...activeCourseIds, ...pendingCourseIds])];
     }
+
+    // Devstore Fallback (Auth User)
+    const devInsc = devInscripciones.filter(i => i.user_id === user.id);
+    devInsc.forEach(i => {
+      if (!enrolledIds.includes(i.curso_id)) {
+        enrolledIds.push(i.curso_id);
+        if (i.estado === "activo") {
+          activeCourseIds.push(i.curso_id);
+          hasActive = true;
+        } else {
+          pendingCourseIds.push(i.curso_id);
+          hasPending = true;
+        }
+      }
+    });
   }
   
   // 3. Fetch Active Courses
   if (enrolledIds.length > 0) {
-      // Use adminClient to be safe
-      const adminClient = createSupabaseAdminClient();
+      let adminClient: any = null;
+      try { adminClient = createSupabaseAdminClient(); } catch { adminClient = null; }
       try {
-        const { data, error } = await adminClient
-          .from("cursos")
-          .select("*")
-          .in("id", enrolledIds)
-          .order("orden", { ascending: true });
-        
-        if (error || !data || data.length === 0) {
-           // Fallback to devCursos if DB is empty or error
-           cursos = devCursos.filter(c => enrolledIds.includes(c.id)) as any;
-        } else {
-           cursos = Array.isArray(data) ? data as CursoRow[] : [];
+        if (adminClient) {
+          const { data, error } = await adminClient
+            .from("cursos")
+            .select("*")
+            .in("id", enrolledIds)
+            .order("orden", { ascending: true });
+          if (!error && data && data.length > 0) {
+            cursos = Array.isArray(data) ? (data as CursoRow[]) : [];
+          }
+        } else if (supabase) {
+          const { data, error } = await supabase
+            .from("cursos")
+            .select("*")
+            .in("id", enrolledIds)
+            .order("orden", { ascending: true });
+          if (!error && data && data.length > 0) {
+            cursos = Array.isArray(data) ? (data as CursoRow[]) : [];
+          }
         }
-      } catch {
-         // Fallback on crash
-         cursos = devCursos.filter(c => enrolledIds.includes(c.id)) as any;
-      }
+      } catch {}
   }
 
   // 4. Fetch All Courses for Disponibles
-  const adminClient = createSupabaseAdminClient();
+  let adminClient: any = null;
+  try { adminClient = createSupabaseAdminClient(); } catch { adminClient = null; }
   let allCursos: any[] = [];
   try {
-    const { data } = await adminClient
-      .from("cursos")
-      .select("*")
-      .order("orden", { ascending: true });
-    allCursos = Array.isArray(data) ? data : [];
+    if (adminClient) {
+      const { data } = await adminClient
+        .from("cursos")
+        .select("*")
+        .order("orden", { ascending: true });
+      allCursos = Array.isArray(data) ? data : [];
+    } else if (supabase) {
+      const { data } = await supabase
+        .from("cursos")
+        .select("*")
+        .order("orden", { ascending: true });
+      allCursos = Array.isArray(data) ? data : [];
+    }
   } catch {}
 
-  if (allCursos.length === 0) {
-    allCursos = devCursos;
-  }
-    
   const list = Array.isArray(allCursos) ? allCursos : [];
   const baseDisponibles = list.map((c: any) => ({ id: String(c.id), titulo: String(c.titulo ?? "Curso"), ...c }));
   
-  // If active course not found in DB but present in cookies, try to find in ALL courses/devCursos and append to 'cursos'
+  // If active course not found in DB but present in cookies, try to find in ALL courses and append to 'cursos'
   if (hasActive && cursos.length === 0) {
-      // Try to find in baseDisponibles (which includes devCursos if DB empty)
+      // Try to find in baseDisponibles
       const foundInAll = baseDisponibles.filter(c => enrolledIds.includes(c.id));
       if (foundInAll.length > 0) {
           cursos = foundInAll as any;
@@ -242,13 +270,23 @@ export default async function CursosPage(props: { searchParams: Promise<{ solici
   }
   if (!activeCourseTitle && activeCourseIds.length > 0) {
     try {
-      const adminClient2 = createSupabaseAdminClient();
-      const { data: row } = await adminClient2
-        .from("cursos")
-        .select("titulo")
-        .eq("id", activeCourseIds[0])
-        .single();
-      if (row?.titulo) activeCourseTitle = String(row.titulo);
+      let adminClient2: any = null;
+      try { adminClient2 = createSupabaseAdminClient(); } catch { adminClient2 = null; }
+      if (adminClient2) {
+        const { data: row } = await adminClient2
+          .from("cursos")
+          .select("titulo")
+          .eq("id", activeCourseIds[0])
+          .single();
+        if (row?.titulo) activeCourseTitle = String(row.titulo);
+      } else if (supabase) {
+        const { data: row } = await supabase
+          .from("cursos")
+          .select("titulo")
+          .eq("id", activeCourseIds[0])
+          .single();
+        if (row?.titulo) activeCourseTitle = String(row.titulo);
+      }
     } catch {}
   }
 
@@ -267,15 +305,26 @@ export default async function CursosPage(props: { searchParams: Promise<{ solici
   let mensajes: Array<{ titulo: string; contenido: string; created_at: string }> = [];
   if (hasActive && activeCourseIds.length > 0) {
     try {
-      const adminClient = createSupabaseAdminClient();
-      let query = adminClient
-        .from("mensajes")
-        .select("titulo, contenido, created_at, curso_id")
-        .order("created_at", { ascending: false })
-        .limit(30)
-        .or(`curso_id.is.null,curso_id.in.(${activeCourseIds.join(",")})`);
-  
-      const { data } = await query;
+      let adminClientMsg: any = null;
+      try { adminClientMsg = createSupabaseAdminClient(); } catch { adminClientMsg = null; }
+      let data: any[] | null = null;
+      if (adminClientMsg) {
+        const res = await adminClientMsg
+          .from("mensajes")
+          .select("titulo, contenido, created_at, curso_id")
+          .order("created_at", { ascending: false })
+          .limit(30)
+          .or(`curso_id.is.null,curso_id.in.(${activeCourseIds.join(",")})`);
+        data = res?.data || null;
+      } else if (supabase) {
+        const res = await supabase
+          .from("mensajes")
+          .select("titulo, contenido, created_at, curso_id")
+          .order("created_at", { ascending: false })
+          .limit(30)
+          .or(`curso_id.is.null,curso_id.in.(${activeCourseIds.join(",")})`);
+        data = res?.data || null;
+      }
       if (data) {
         mensajes = data.map((m: any) => ({
              titulo: String(m.titulo || ""),

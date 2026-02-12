@@ -2,7 +2,6 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { PendientesList } from "./PendientesList";
 import { User, Activity, TrendingUp, Users, BookOpen, DollarSign, AlertTriangle, Database } from "lucide-react";
-import { devInscripciones, devIntereses, devPerfiles } from "@/lib/devstore";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { cookies } from "next/headers";
 
@@ -19,24 +18,33 @@ export default async function AdminDashboardPage() {
   
   const client = supabaseAdmin || supabase;
   
-  // Stats
-  const stats = {
-      totalCursos: 2,
-      totalAlumnos: devInscripciones.length,
-      totalProfesores: 1,
-      totalPagos: 0,
-      cursosActivos: 1,
-      alumnosActivos: devInscripciones.filter(i => i.estado === "activo").length,
-      ingresosMes: 0,
-      evaluacionesActivas: 0,
-      materialesCargados: 3
-  };
-
   let pendientes: any[] = [];
   let dbError: string | null = null;
+  let stats = {
+      totalCursos: 0,
+      totalAlumnos: 0,
+      totalProfesores: 1,
+      totalPagos: 0,
+      cursosActivos: 0,
+      alumnosActivos: 0,
+      ingresosMes: 0,
+      evaluacionesActivas: 0,
+      materialesCargados: 0
+  };
 
   // Fetch directly from DB instead of API to avoid network/URL issues
   try {
+    // Stats reales
+    const { count: countCursos } = await client.from("cursos").select("*", { count: 'exact', head: true });
+    const { count: countCursosActivos } = await client.from("cursos").select("*", { count: 'exact', head: true }).eq("estado", "activo");
+    const { count: countInscripciones } = await client.from("cursos_alumnos").select("*", { count: 'exact', head: true });
+    const { count: countInscripcionesActivas } = await client.from("cursos_alumnos").select("*", { count: 'exact', head: true }).eq("estado", "activo");
+    
+    stats.totalCursos = countCursos || 0;
+    stats.cursosActivos = countCursosActivos || 0;
+    stats.totalAlumnos = countInscripciones || 0;
+    stats.alumnosActivos = countInscripcionesActivas || 0;
+
     const { data, error } = await client
         .from("cursos_alumnos")
         .select("user_id, curso_id, estado, created_at")
@@ -51,7 +59,7 @@ export default async function AdminDashboardPage() {
     // También traer de intereses (solicitudes por email)
     const { data: intereses, error: errorIntereses } = await client
       .from("intereses")
-      .select("email, course_id, created_at")
+      .select("email, course_id, curso_id, created_at")
       .limit(100);
 
     if (Array.isArray(intereses) && intereses.length > 0 && !errorIntereses) {
@@ -118,15 +126,6 @@ export default async function AdminDashboardPage() {
        let nombre = isEmailId ? "" : (userInfo[item.user_id]?.nombre || "");
        let apellido = isEmailId ? "" : (userInfo[item.user_id]?.apellido || "");
        
-       // Intentar buscar nombre en devPerfiles si es email
-       if (isEmailId) {
-         const dev = devPerfiles.find(p => String(p.email).toLowerCase() === String(email).toLowerCase());
-         if (dev) {
-            nombre = dev.nombre || nombre;
-            apellido = dev.apellido || apellido;
-         }
-       }
-
        return {
          ...item,
          email,

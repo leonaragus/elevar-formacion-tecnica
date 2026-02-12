@@ -11,7 +11,8 @@ import {
   Settings,
   X,
   LogOut,
-  Calendar
+  Calendar,
+  Video
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -37,6 +38,12 @@ const menuItems = [
     href: "/admin/calendario",
     icon: Calendar,
     description: "Fechas de entrega"
+  },
+  {
+    name: "Clases Grabadas",
+    href: "/admin/clases",
+    icon: Video,
+    description: "Videos de clases"
   },
   {
     name: "Mensajes",

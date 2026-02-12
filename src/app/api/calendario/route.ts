@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 // GET /api/calendario - Obtener fechas de entrega del alumno
 export async function GET(request: Request) {
   try {
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
     
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
 // POST /api/calendario - Crear entrega del alumno
 export async function POST(request: Request) {
   try {
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
     
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     

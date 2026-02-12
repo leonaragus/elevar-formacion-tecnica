@@ -1,5 +1,5 @@
 // Página para ver una clase grabada individual
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { notFound } from 'next/navigation';
 import VideoPlayer from '@/components/VideoPlayer';
 
@@ -7,41 +7,240 @@ interface PageProps {
   params: {
     id: string;
   };
+  searchParams?: {
+    curso?: string;
+  };
 }
 
-export default async function VerClasePage({ params }: PageProps) {
-  const supabase = createSupabaseServerClient();
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-  // Obtener la clase grabada
+async function resolvePublicUrls(
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+  clase: any
+) {
+  const bucketPriority = ['videos', 'materiales', 'clases-grabadas'];
+  async function urlOk(url: string | undefined) {
+    if (!url) return false;
+    try {
+      const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+  let url1 = clase?.video_public_url || '';
+  let url2 = clase?.video_public_url_parte2 || '';
+  const videoPath = String(clase?.video_path || '');
+  const videoPath2 = String(clase?.video_path_parte2 || '');
+  if (!(await urlOk(url1)) && videoPath) {
+    for (const b of bucketPriority) {
+      const { data } = supabase.storage.from(b).getPublicUrl(videoPath);
+      if (await urlOk(data.publicUrl)) {
+        url1 = data.publicUrl;
+        break;
+      }
+    }
+  }
+  if (!(await urlOk(url2)) && videoPath2) {
+    for (const b of bucketPriority) {
+      const { data } = supabase.storage.from(b).getPublicUrl(videoPath2);
+      if (await urlOk(data.publicUrl)) {
+        url2 = data.publicUrl;
+        break;
+      }
+    }
+  }
+  return { url1, url2 };
+}
+
+export default async function VerClasePage({ params, searchParams }: PageProps) {
+  const supabase = createSupabaseAdminClient();
+
+  const cursoParam = String(searchParams?.curso || '').trim();
+
+  // Si viene el curso en la URL, priorizar mostrar la última clase de ese curso
+  if (cursoParam) {
+    const { data: claseUltima } = await supabase
+      .from('clases_grabadas')
+      .select('*')
+      .eq('curso_id', cursoParam)
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (claseUltima) {
+      const clase = claseUltima;
+      const isUuid = (v: any) =>
+        typeof v === 'string' &&
+        /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(v);
+      let cursoTitulo = '';
+      if (isUuid(clase.curso_id)) {
+        const { data: curso } = await supabase
+          .from('cursos')
+          .select('titulo')
+          .eq('id', clase.curso_id)
+          .maybeSingle();
+        cursoTitulo = curso?.titulo || '';
+      }
+      const urls = await resolvePublicUrls(supabase, clase);
+      return (
+        <div className="min-h-screen bg-gray-50 py-8">
+          <div className="max-w-6xl mx-auto px-4">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                {clase.titulo}
+              </h1>
+              {cursoTitulo && (
+                <p className="text-lg text-gray-600">
+                  📚 Curso: {cursoTitulo}
+                </p>
+              )}
+              <p className="text-gray-500 mt-2">
+                📅 {new Date(clase.fecha_clase).toLocaleDateString('es-ES', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+                {clase.duracion_minutos && (
+                  <span className="ml-4">
+                    ⏱️ {clase.duracion_minutos} minutos
+                  </span>
+                )}
+              </p>
+              {clase.descripcion && (
+                <p className="text-gray-700 mt-4 text-lg leading-relaxed">
+                  {clase.descripcion}
+                </p>
+              )}
+            </div>
+            <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-8">
+              <VideoPlayer
+                videoUrl={urls.url1 || clase.video_public_url}
+                videoUrlParte2={urls.url2 || clase.video_public_url_parte2}
+                titulo={clase.titulo}
+                transcripcionTexto={clase.transcripcion_texto}
+                transcripcionSrt={clase.transcripcion_srt}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  // Si no hay curso en la URL, intentar por id
+  const idNorm = String(params?.id || '').trim();
   const { data: clase, error } = await supabase
     .from('clases_grabadas')
     .select('*')
-    .eq('id', params.id)
-    .eq('activo', true)
-    .single();
+    .eq('id', idNorm)
+    .maybeSingle();
 
-  if (error || !clase) {
-    notFound();
+  if (!clase || (error && String(error.message || '').toLowerCase().includes('invalid input syntax'))) {
+    const { data: claseGlobal } = await supabase
+      .from('clases_grabadas')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (claseGlobal) {
+      const cg = claseGlobal;
+      const isUuid = (v: any) =>
+        typeof v === 'string' &&
+        /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(v);
+      let cursoTitulo = '';
+      if (isUuid(cg.curso_id)) {
+        const { data: curso } = await supabase
+          .from('cursos')
+          .select('titulo')
+          .eq('id', cg.curso_id)
+          .maybeSingle();
+        cursoTitulo = curso?.titulo || '';
+      }
+      const urls = await resolvePublicUrls(supabase, cg);
+      return (
+        <div className="min-h-screen bg-gray-50 py-8">
+          <div className="max-w-6xl mx-auto px-4">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                {cg.titulo}
+              </h1>
+              {cursoTitulo && (
+                <p className="text-lg text-gray-600">
+                  📚 Curso: {cursoTitulo}
+                </p>
+              )}
+              <p className="text-gray-500 mt-2">
+                📅 {new Date(cg.fecha_clase).toLocaleDateString('es-ES', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+                {cg.duracion_minutos && (
+                  <span className="ml-4">
+                    ⏱️ {cg.duracion_minutos} minutos
+                  </span>
+                )}
+              </p>
+              {cg.descripcion && (
+                <p className="text-gray-700 mt-4 text-lg leading-relaxed">
+                  {cg.descripcion}
+                </p>
+              )}
+            </div>
+            <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-8">
+              <VideoPlayer
+                videoUrl={urls.url1 || cg.video_public_url}
+                videoUrlParte2={urls.url2 || cg.video_public_url_parte2}
+                titulo={cg.titulo}
+                transcripcionTexto={cg.transcripcion_texto}
+                transcripcionSrt={cg.transcripcion_srt}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-3xl mx-auto px-4">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Clase no encontrada</h1>
+          <div className="mt-6">
+            <a href="/admin/clases" className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">← Volver a clases</a>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  // Obtener información del curso
-  const { data: curso } = await supabase
-    .from('cursos')
-    .select('titulo')
-    .eq('id', clase.curso_id)
-    .single();
+  let cursoTitulo = '';
+  const isUuid = (v: any) =>
+    typeof v === 'string' &&
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(v);
+  if (isUuid(clase.curso_id)) {
+    const { data: curso } = await supabase
+      .from('cursos')
+      .select('titulo')
+      .eq('id', clase.curso_id)
+      .maybeSingle();
+    cursoTitulo = curso?.titulo || '';
+  }
+  const urlsMain = await resolvePublicUrls(supabase, clase);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-6xl mx-auto px-4">
-        {/* Encabezado */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             {clase.titulo}
           </h1>
-          {curso && (
+          {cursoTitulo && (
             <p className="text-lg text-gray-600">
-              📚 Curso: {curso.titulo}
+              📚 Curso: {cursoTitulo}
             </p>
           )}
           <p className="text-gray-500 mt-2">
@@ -67,8 +266,8 @@ export default async function VerClasePage({ params }: PageProps) {
         {/* Reproductor de video */}
         <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-8">
           <VideoPlayer
-            videoUrl={clase.video_public_url}
-            videoUrlParte2={clase.video_public_url_parte2}
+            videoUrl={urlsMain.url1 || clase.video_public_url}
+            videoUrlParte2={urlsMain.url2 || clase.video_public_url_parte2}
             titulo={clase.titulo}
             transcripcionTexto={clase.transcripcion_texto}
             transcripcionSrt={clase.transcripcion_srt}
@@ -116,12 +315,7 @@ export default async function VerClasePage({ params }: PageProps) {
 
         {/* Botones de acción */}
         <div className="flex justify-between items-center mt-8">
-          <a
-            href="/admin/clases"
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            ← Volver a clases
-          </a>
+          <a href="/admin/clases" className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">← Volver a clases</a>
           
           <div className="flex gap-3">
             <a

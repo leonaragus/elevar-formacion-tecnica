@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Clock, Bell, CheckCircle, XCircle } from "lucide-react";
+import { Clock, Bell, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 interface NotificationHistoryItem {
   id: string;
@@ -22,6 +23,7 @@ interface NotificationHistoryProps {
 export default function NotificationHistory({ cursoId, limit = 50 }: NotificationHistoryProps) {
   const [history, setHistory] = useState<NotificationHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const supabase = createSupabaseBrowserClient();
 
   useEffect(() => {
     loadHistory();
@@ -29,10 +31,17 @@ export default function NotificationHistory({ cursoId, limit = 50 }: Notificatio
 
   const loadHistory = async () => {
     try {
-      // Get session from cookie
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+
       const response = await fetch(`/api/notifications/history?limit=${limit}${cursoId ? `&curso_id=${cursoId}` : ''}`, {
         headers: {
-          'Authorization': `Bearer ${document.cookie.includes('sb-access-token') ? 'token' : ''}`
+          'Authorization': `Bearer ${token}`
         }
       });
 
@@ -49,10 +58,15 @@ export default function NotificationHistory({ cursoId, limit = 50 }: Notificatio
 
   const markAsRead = async (notificationId: string) => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) return;
+
       await fetch(`/api/notifications/history/${notificationId}/read`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${document.cookie.includes('sb-access-token') ? 'token' : ''}`
+          'Authorization': `Bearer ${token}`
         }
       });
 

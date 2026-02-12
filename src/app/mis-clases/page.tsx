@@ -2,41 +2,63 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
+import CommentsCourseSummary from '@/components/CommentsCourseSummary';
+import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
-  searchParams?: {
+  searchParams?: Promise<{
     curso_id?: string;
-  };
+  }>;
 }
 
-export default async function MisClasesPage({ searchParams }: PageProps) {
-  const supabase = createSupabaseServerClient();
+export default async function MisClasesPage(props: PageProps) {
+  const searchParams = await props.searchParams;
+  const supabase = await createSupabaseServerClient();
+  const cookieStore = await cookies();
 
-  // Obtener usuario actual
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data?.user) {
+  // Obtener usuario actual o sesión de alumno por cookie
+  const { data: authData } = await supabase.auth.getUser();
+  const user = authData?.user;
+  
+  const studentEmail = cookieStore.get("student_email")?.value;
+  const studentOk = cookieStore.get("student_ok")?.value === "1";
+  const studentCourseId = cookieStore.get("student_course_id")?.value;
+
+  if (!user && !studentOk) {
     notFound();
   }
   
-  const user = data.user;
-
-  const cursoId = searchParams?.curso_id;
+  const cursoId = searchParams?.curso_id || (user ? undefined : studentCourseId);
 
   // Si no hay curso seleccionado, mostrar cursos disponibles
   if (!cursoId) {
-    // Obtener cursos en los que está inscrito el alumno
-    const { data: cursosInscritos } = await supabase
-      .from('cursos_alumnos')
-      .select(`
-        curso_id,
-        cursos!inner(titulo, id)
-      `)
-      .eq('user_id', user.id)
-      .eq('estado', 'activo');
+    let cursosInscritos: any[] = [];
 
-    if (!cursosInscritos || cursosInscritos.length === 0) {
+    if (user) {
+      const { data } = await supabase
+        .from('cursos_alumnos')
+        .select(`
+          curso_id,
+          cursos!inner(titulo, id)
+        `)
+        .eq('user_id', user.id)
+        .eq('estado', 'activo');
+      cursosInscritos = data || [];
+    } else if (studentOk && studentCourseId) {
+       // Si es alumno por cookie, ya tenemos su curso
+       const { data: curso } = await supabase
+         .from('cursos')
+         .select('titulo, id')
+         .eq('id', studentCourseId)
+         .single();
+       if (curso) {
+         cursosInscritos = [{ curso_id: curso.id, cursos: curso }];
+       }
+    }
+
+    if (cursosInscritos.length === 0) {
       return (
         <div className="min-h-screen bg-gray-50 py-8">
           <div className="max-w-4xl mx-auto px-4 text-center">
@@ -110,15 +132,21 @@ export default async function MisClasesPage({ searchParams }: PageProps) {
     .single();
 
   // Verificar que el alumno esté inscrito en este curso
-  const { data: inscripcion } = await supabase
-    .from('cursos_alumnos')
-    .select('estado')
-    .eq('user_id', user.id)
-    .eq('curso_id', cursoId)
-    .eq('estado', 'activo')
-    .single();
+  let isEnrolled = false;
+  if (user) {
+    const { data: insc } = await supabase
+      .from('cursos_alumnos')
+      .select('estado')
+      .eq('user_id', user.id)
+      .eq('curso_id', String(cursoId))
+      .eq('estado', 'activo')
+      .maybeSingle();
+    if (insc) isEnrolled = true;
+  } else if (studentOk && String(studentCourseId) === String(cursoId)) {
+    isEnrolled = true;
+  }
 
-  if (!inscripcion) {
+  if (!isEnrolled) {
     notFound();
   }
 
@@ -145,6 +173,8 @@ export default async function MisClasesPage({ searchParams }: PageProps) {
             </p>
           )}
         </div>
+        
+        <CommentsCourseSummary cursoId={String(cursoId)} />
 
         {/* Lista de clases */}
         {clases && clases.length > 0 ? (

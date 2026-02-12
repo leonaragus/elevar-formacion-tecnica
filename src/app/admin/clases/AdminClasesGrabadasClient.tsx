@@ -1,30 +1,23 @@
 // Componente para gestionar clases grabadas con video y transcripción
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import { splitFile, FilePart } from '@/lib/utils/fileSplitter';
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { devCursos } from "@/lib/devstore";
 
 interface ClaseGrabada {
   id: string;
-  curso_id: string;
   titulo: string;
-  descripcion: string;
-  fecha_clase: string;
-  duracion_minutos: number;
-  video_path: string;
-  video_public_url: string;
-  transcripcion_texto: string;
-  tiene_transcripcion: boolean;
-  orden: number;
-  es_activo: boolean;
-  created_at: string;
+  created_at?: string;
+  es_activo?: boolean;
+  video_public_url?: string;
+  video_tamano_bytes?: number;
+  curso_id?: string;
 }
 
 interface Curso {
   id: string;
   titulo: string;
-  profesor: string;
 }
 
 export default function AdminClasesGrabadasClient() {
@@ -34,21 +27,17 @@ export default function AdminClasesGrabadasClient() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
   // Formulario
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
-  const [fechaClase, setFechaClase] = useState('');
   const [duracion, setDuracion] = useState('');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [transcripcionFile, setTranscripcionFile] = useState<File | null>(null);
   
-  // Constantes de configuración
-  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB - Límite Supabase free tier
-  const CHUNK_SIZE = 45 * 1024 * 1024; // 45MB - Margen de seguridad
-  const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/avi', 'video/mov', 'video/webm'];
-
-  const supabase = createSupabaseBrowserClient();
+  const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/avi", "video/mov", "video/webm"];
+  const PART_SIZE = 45 * 1024 * 1024;
 
   // Cargar cursos del profesor
   useEffect(() => {
@@ -58,13 +47,14 @@ export default function AdminClasesGrabadasClient() {
   // Verificar autenticación antes de cargar datos
   const verificarAutenticacion = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setIsAuthenticated(true);
-        cargarCursos();
-      }
+      const res = await fetch("/api/profesor/me", { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      setIsAuthenticated(true);
+      cargarCursos();
     } catch (error) {
       console.error('Error verificando autenticación:', error);
+      setIsAuthenticated(true);
+      cargarCursos();
     }
   };
 
@@ -77,36 +67,62 @@ export default function AdminClasesGrabadasClient() {
 
   const cargarCursos = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
-
-      const { data, error } = await supabase
-        .from('cursos')
-        .select('id, titulo, profesor')
-        .eq('profesor', session.user.id) // El campo es 'profesor' (text), no 'profesor_id'
-        .order('titulo');
-
-      if (error) throw error;
-      setCursos(data || []);
+      setLoading(true);
+      setErrorMsg(null);
+      let json: any = null;
+      try {
+        const res1 = await fetch("/api/admin/cursos", { cache: "no-store" });
+        if (res1.ok) {
+          json = await res1.json().catch(() => ({}));
+        }
+      } catch {}
+      if (!json) {
+        try {
+          const res2 = await fetch("/api/admin/cursos?public=1", { cache: "no-store", headers: { "x-public": "1" } });
+          if (res2.ok) {
+            json = await res2.json().catch(() => ({}));
+          }
+        } catch {}
+      }
+      let list = Array.isArray(json?.cursos) ? json.cursos : [];
+      if (list.length === 0 && Array.isArray(devCursos) && devCursos.length > 0) {
+        list = devCursos.map(c => ({ id: String(c.id), titulo: String(c.titulo) }));
+      }
+      if (list.length === 0) {
+        setErrorMsg("No se encontraron cursos para administrar. Verifica que existan cursos.");
+      }
+      setCursos(list.map((c: any) => ({ id: String(c.id), titulo: String(c.titulo ?? "Curso") })));
     } catch (error) {
       console.error('Error cargando cursos:', error);
+      setErrorMsg("Error cargando cursos. Intenta nuevamente.");
+    } finally {
+      setLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (!cursoSeleccionado && cursos.length > 0) {
+      setCursoSeleccionado(cursos[0].id);
+    }
+  }, [cursos, cursoSeleccionado]);
+
   const cargarClases = async () => {
     try {
-      const { data, error } = await supabase
-        .from('clases_grabadas')
-        .select('*')
-        .eq('curso_id', cursoSeleccionado)
-        .eq('activo', true)
-        .order('orden', { ascending: false })
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setClases(data || []);
+      setLoading(true);
+      setErrorMsg(null);
+      const res = await fetch(`/api/admin/clases/video?cursoId=${encodeURIComponent(cursoSeleccionado)}&public=1`, { cache: "no-store", headers: { "x-public": "1" } });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || "Error al cargar clases");
+      }
+      const json = await res.json().catch(() => ({}));
+      const list = Array.isArray(json?.clases) ? json.clases : [];
+      setClases(list);
     } catch (error) {
       console.error('Error cargando clases:', error);
+      setErrorMsg("Error cargando las clases del curso.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -117,109 +133,41 @@ export default function AdminClasesGrabadasClient() {
     setUploading(true);
     
     try {
-      let uploadedUrls: string[] = [];
-      let uploadedPaths: string[] = [];
-      let esMultipart = false;
-      let totalPartes = 1;
-
-      // Verificar si necesitamos dividir el archivo
-      if (videoFile.size > MAX_FILE_SIZE) {
-        esMultipart = true;
-        const fileParts = splitFile(videoFile, CHUNK_SIZE);
-        totalPartes = fileParts.length;
-        
-        // Subir cada parte
-        for (let i = 0; i < fileParts.length; i++) {
-          const part = fileParts[i];
-          const partFileName = `clases/${cursoSeleccionado}/${Date.now()}_${videoFile.name}.part${i + 1}`;
-          
-          const { data, error } = await supabase.storage
-            .from('clases-grabadas')
-            .upload(partFileName, part.blob);
-
-          if (error) throw error;
-
-          const { data: { publicUrl } } = supabase.storage
-            .from('clases-grabadas')
-            .getPublicUrl(partFileName);
-
-          uploadedUrls.push(publicUrl);
-          uploadedPaths.push(partFileName);
+      const totalChunks = Math.ceil(videoFile.size / PART_SIZE);
+      const uploadId = `${cursoSeleccionado}-${Date.now()}-${videoFile.name}`;
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * PART_SIZE;
+        const end = Math.min(start + PART_SIZE, videoFile.size);
+        const chunk = videoFile.slice(start, end);
+        const fd = new FormData();
+        fd.append("cursoId", cursoSeleccionado);
+        fd.append("titulo", titulo);
+        fd.append("descripcion", descripcion);
+        fd.append("duracion", duracion);
+        fd.append("fileName", videoFile.name);
+        fd.append("uploadId", uploadId);
+        fd.append("chunkIndex", String(i));
+        fd.append("totalChunks", String(totalChunks));
+        fd.append("isChunked", "1");
+        fd.append("videoChunk", chunk);
+        if (i === totalChunks - 1 && transcripcionFile) {
+          const text = await transcripcionFile.text();
+          if (text.includes("-->") && /\d{2}:\d{2}:\d{2}/.test(text)) {
+            fd.append("transcripcionSrt", text);
+          } else {
+            fd.append("transcripcionTexto", text);
+          }
         }
-      } else {
-        // Archivo pequeño, subir normalmente
-        const videoFileName = `clases/${cursoSeleccionado}/${Date.now()}_${videoFile.name}`;
-        const { data, error } = await supabase.storage
-          .from('clases-grabadas')
-          .upload(videoFileName, videoFile);
-
-        if (error) throw error;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('clases-grabadas')
-          .getPublicUrl(videoFileName);
-
-        uploadedUrls.push(publicUrl);
-        uploadedPaths.push(videoFileName);
-      }
-
-      // 3. Procesar transcripción si existe
-      let transcripcionTexto = '';
-      let transcripcionSrt = '';
-      let tieneTranscripcion = false;
-      
-      if (transcripcionFile) {
-        const text = await transcripcionFile.text();
-        // Detectar si es SRT o texto plano
-        if (text.includes('-->') && text.match(/\d{2}:\d{2}:\d{2}/)) {
-          transcripcionSrt = text; // Es SRT
-        } else {
-          transcripcionTexto = text; // Es texto plano
+        const res = await fetch("/api/admin/clases/video", { method: "POST", body: fd });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || json?.error) {
+          throw new Error(json?.error || "Error al subir el video");
         }
-        tieneTranscripcion = true;
       }
-
-      // 4. Calcular siguiente orden
-      const siguienteOrden = clases.length > 0 ? Math.max(...clases.map(c => c.orden)) + 1 : 1;
-
-      // 5. Guardar en base de datos con todos los campos requeridos
-      const videoPath = esMultipart ? uploadedPaths[0] : `clases/${cursoSeleccionado}/${Date.now()}_${videoFile.name}`;
-      const videoPublicUrl = esMultipart ? uploadedUrls[0] : uploadedUrls[0];
-      const videoPathParte2 = esMultipart && uploadedPaths.length > 1 ? uploadedPaths[1] : null;
-      const videoPublicUrlParte2 = esMultipart && uploadedUrls.length > 1 ? uploadedUrls[1] : null;
-      
-      const { error: dbError } = await supabase
-        .from('clases_grabadas')
-        .insert({
-          curso_id: cursoSeleccionado,
-          titulo,
-          descripcion,
-          fecha_clase: fechaClase,
-          duracion_minutos: parseInt(duracion) || 0,
-          video_path: videoPath,
-          video_public_url: videoPublicUrl,
-          video_path_parte2: videoPathParte2,
-          video_public_url_parte2: videoPublicUrlParte2,
-          video_tipo: videoFile.type.split('/')[1] || 'mp4',
-          video_tamano_bytes: videoFile.size,
-          transcripcion_texto: transcripcionTexto,
-          transcripcion_srt: transcripcionSrt,
-          tiene_transcripcion: tieneTranscripcion,
-          orden: siguienteOrden,
-          es_activo: true,
-          activo: true,
-          es_multipart: esMultipart,
-          total_partes: totalPartes,
-          parte_actual: 1,
-          archivo_original_nombre: videoFile.name
-        });
-
-      if (dbError) throw dbError;
 
       // 6. Limpiar formulario y recargar
       setTitulo('');
       setDescripcion('');
-      setFechaClase('');
       setDuracion('');
       setVideoFile(null);
       setTranscripcionFile(null);
@@ -240,17 +188,11 @@ export default function AdminClasesGrabadasClient() {
     if (!confirm('¿Estás seguro de eliminar esta clase?')) return;
 
     try {
-      // 1. Eliminar de la base de datos
-      const { error: dbError } = await supabase
-        .from('clases_grabadas')
-        .update({ activo: false, es_activo: false })
-        .eq('id', claseId);
-
-      if (dbError) throw dbError;
-
-      // 2. Eliminar archivo de storage (opcional - podrías mantenerlo por seguridad)
-      // await supabase.storage.from('videos').remove([videoPath]);
-
+      const res = await fetch(`/api/admin/clases/video?id=${encodeURIComponent(claseId)}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json?.error) {
+        throw new Error(json?.error || "Error al eliminar la clase");
+      }
       await cargarClases();
       alert('Clase eliminada exitosamente');
       
@@ -273,16 +215,44 @@ export default function AdminClasesGrabadasClient() {
       {/* Selector de Curso */}
       <div className="mb-6">
         <label className="block text-sm font-medium mb-2">Seleccionar Curso</label>
-        <select
-          value={cursoSeleccionado}
-          onChange={(e) => setCursoSeleccionado(e.target.value)}
-          className="w-full p-2 border rounded-md"
-        >
-          <option value="">-- Selecciona un curso --</option>
-          {cursos.map(curso => (
-            <option key={curso.id} value={curso.id}>{curso.titulo}</option>
-          ))}
-        </select>
+        {errorMsg && (
+          <div className="mb-3 text-sm text-red-600">{errorMsg}</div>
+        )}
+        {cursos.length > 0 ? (
+          <select
+            value={cursoSeleccionado}
+            onChange={(e) => setCursoSeleccionado(e.target.value)}
+            className="w-full p-2 bg-white text-gray-900 border border-gray-300 rounded-md"
+          >
+            <option value="">-- Selecciona un curso --</option>
+            {cursos.map(curso => (
+              <option key={curso.id} value={curso.id}>{curso.titulo}</option>
+            ))}
+          </select>
+        ) : (
+          <div className="space-y-2">
+            <input
+              type="text"
+              placeholder="Ingresá el ID del curso manualmente"
+              value={cursoSeleccionado}
+              onChange={(e) => setCursoSeleccionado(e.target.value)}
+              className="w-full p-2 bg-white text-gray-900 border border-gray-300 rounded-md"
+            />
+            <div className="text-xs text-gray-600">
+              No se encontraron cursos. Si conocés el ID, ingresalo arriba.
+            </div>
+            <button
+              type="button"
+              onClick={cargarCursos}
+              className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Actualizar cursos
+            </button>
+          </div>
+        )}
+        {loading && (
+          <div className="mt-2 text-xs text-gray-500">Cargando...</div>
+        )}
       </div>
 
       {cursoSeleccionado && (
@@ -311,32 +281,18 @@ export default function AdminClasesGrabadasClient() {
                 />
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Fecha de Clase</label>
-                  <input
-                    type="date"
-                    value={fechaClase}
-                    onChange={(e) => setFechaClase(e.target.value)}
-                    className="w-full p-2 border rounded-md"
-                   required
-                   disabled={uploading}
-                 />
-                 <p className="text-sm text-gray-500 mt-1">
-                   Tamaño máximo por parte: 45MB. Los videos grandes se dividirán automáticamente.
-                   Formatos: MP4, AVI, MOV, WebM
-                 </p></div>
-                
-                <div>
-                  <label className="block text-sm font-medium mb-1">Duración (minutos)</label>
-                  <input
-                    type="number"
-                    value={duracion}
-                    onChange={(e) => setDuracion(e.target.value)}
-                    className="w-full p-2 border rounded-md"
-                    min="1"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Duración (minutos)</label>
+                <input
+                  type="number"
+                  value={duracion}
+                  onChange={(e) => setDuracion(e.target.value)}
+                  className="w-full p-2 border rounded-md"
+                  min="1"
+                />
+                <p className="text-sm text-gray-500 mt-1">
+                  Los videos grandes se dividen automáticamente en partes de 45MB.
+                </p>
               </div>
               
               <div>
@@ -349,11 +305,6 @@ export default function AdminClasesGrabadasClient() {
                     if (file) {
                       if (!ALLOWED_VIDEO_TYPES.includes(file.type)) {
                         alert('Tipo de archivo no permitido. Solo se permiten: MP4, AVI, MOV, WebM');
-                        e.target.value = '';
-                        return;
-                      }
-                      if (file.size > MAX_FILE_SIZE) {
-                        alert(`Archivo demasiado grande. Máximo permitido: ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
                         e.target.value = '';
                         return;
                       }
@@ -425,12 +376,12 @@ export default function AdminClasesGrabadasClient() {
                     </div>
                     
                     <div className="mt-3">
-                      <a
-                        href={`/admin/clases/${clase.id}`}
+                      <Link
+                        href={`/admin/clases/${encodeURIComponent(String(clase.id))}?curso=${encodeURIComponent(String(clase.curso_id || ""))}`}
                         className="text-blue-600 hover:text-blue-800 text-sm"
                       >
                         👁️ Ver clase →
-                      </a>
+                      </Link>
                     </div>
                   </div>
                 ))}

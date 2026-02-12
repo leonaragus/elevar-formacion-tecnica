@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 // GET /api/admin/calendario - Obtener todas las fechas de entrega
 export async function GET(request: Request) {
   try {
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
     
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
 
     // Verificar que el usuario sea admin o profesor
     const { data: profile, error: profileError } = await supabase
-      .from('profiles')
+      .from('perfiles')
       .select('rol')
       .eq('id', user.id)
       .single();
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
 // POST /api/admin/calendario - Crear nueva fecha de entrega
 export async function POST(request: Request) {
   try {
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
     
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 
     // Verificar que el usuario sea admin o profesor
     const { data: profile, error: profileError } = await supabase
-      .from('profiles')
+      .from('perfiles')
       .select('rol')
       .eq('id', user.id)
       .single();

@@ -1,17 +1,57 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { devIntereses, upsertInscripcion, devPerfiles } from "@/lib/devstore";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-function isAuthorized(req: NextRequest) {
+async function isAuthorized(req: NextRequest) {
   const token = req.headers.get("x-admin-token") || req.headers.get("X-Admin-Token");
   const expected = process.env.ADMIN_TOKEN;
   const hasHeaderOk = Boolean(token && expected && token === expected);
   const hasProfCookie = req.cookies.get("prof_code_ok")?.value === "1";
-  return hasHeaderOk || hasProfCookie;
+  
+  if (hasHeaderOk || hasProfCookie) return true;
+  if (process.env.NODE_ENV === "development") return true;
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    return !!user;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveUserIdFromEmail(supabase: ReturnType<typeof createSupabaseAdminClient>, email: string) {
+  const normalized = String(email || "").trim().toLowerCase();
+  if (!normalized || !normalized.includes("@")) return null;
+
+  // 1. Try to find existing user by email
+  const { data: { users }, error: listError } = await supabase.auth.admin.listUsers({
+    perPage: 1000
+  });
+  
+  if (!listError && users) {
+    const found = users.find(u => u.email?.toLowerCase() === normalized);
+    if (found) return found.id;
+  }
+
+  // 2. Try to create user if not found
+  const { data: created, error: createError } = await supabase.auth.admin.createUser({
+    email: normalized,
+    email_confirm: true,
+    user_metadata: { source: 'admin_approval' }
+  });
+
+  if (created?.user?.id) return created.user.id;
+
+  if (createError) {
+    console.error(`Error creating user ${normalized}:`, createError);
+  }
+
+  return null;
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
   try {
@@ -37,94 +77,53 @@ export async function POST(req: NextRequest) {
     const supabase = createSupabaseAdminClient();
 
     let resolvedUserId = user_id && !user_id.includes("@") ? user_id : null;
-    let resolvedEmail = email.includes("@") ? email : null;
+    let resolvedEmail = email.includes("@") ? email : (user_id.includes("@") ? user_id.toLowerCase() : null);
 
-    if (!resolvedUserId && !resolvedEmail && user_id.includes("@")) {
-      resolvedEmail = user_id.toLowerCase();
+    if (!resolvedUserId && resolvedEmail) {
+      resolvedUserId = await resolveUserIdFromEmail(supabase, resolvedEmail);
     }
 
     if (!resolvedUserId) {
-      if (!resolvedEmail) {
-        return NextResponse.json({ ok: false, error: "email o user_id requerido" }, { status: 400 });
-      }
-      const created = await supabase.auth.admin
-        .createUser({ email: resolvedEmail, email_confirm: true })
-        .catch(() => null as any);
-      const createdId = created?.data?.user?.id ?? null;
-      if (createdId) {
-        resolvedUserId = createdId;
-      } else {
-        const listed = await supabase.auth.admin
-          .listUsers({ page: 1, perPage: 1000 })
-          .catch(() => null as any);
-        const users = Array.isArray(listed?.data?.users) ? listed.data.users : [];
-        const found = users.find((u: any) => String(u?.email || "").toLowerCase() === resolvedEmail);
-        resolvedUserId = typeof found?.id === "string" ? found.id : null;
-      }
+      return NextResponse.json({ ok: false, error: "No se pudo resolver el usuario (email o ID inválido)" }, { status: 400 });
     }
 
-    if (!resolvedUserId) {
-      if (resolvedEmail) {
-        upsertInscripcion(resolvedEmail, curso_id, "activo");
-        const idx = devIntereses.findIndex((i) => i.email === resolvedEmail && i.curso_id === curso_id);
-        if (idx >= 0) devIntereses.splice(idx, 1);
-        await supabase.from("intereses").delete().eq("email", resolvedEmail).eq("course_id", curso_id);
-        // Intentar crear usuario y guardar metadata para legajo
-        try {
-          const createRes = await supabase.auth.admin.createUser({ email: resolvedEmail, email_confirm: true });
-          const createdId = createRes?.data?.user?.id ?? null;
-          const targetNombre = nombre || devPerfiles.find(p => p.email.toLowerCase() === resolvedEmail)?.nombre || "";
-          const targetApellido = apellido || devPerfiles.find(p => p.email.toLowerCase() === resolvedEmail)?.apellido || "";
-          if (createdId && (targetNombre || targetApellido)) {
-            await supabase.auth.admin.updateUserById(createdId, { user_metadata: { nombre: targetNombre, apellido: targetApellido } } as any);
-          }
-        } catch {}
-        return NextResponse.json({ ok: true });
-      }
-      return NextResponse.json({ ok: false, error: "No se pudo resolver user_id" }, { status: 500 });
-    }
-
+    // 1. Upsert into cursos_alumnos as active
     const { error: cursoError } = await supabase.from("cursos_alumnos").upsert({
       user_id: resolvedUserId,
       curso_id,
       estado: "activo",
+      updated_at: new Date().toISOString()
     }, { onConflict: "curso_id,user_id" });
 
     if (cursoError) {
-      const msg = String(cursoError.message || "").toLowerCase();
-      const shouldFallback =
-        msg.includes("invalid api key") ||
-        msg.includes("row-level security") ||
-        msg.includes("permission denied") ||
-        msg.includes("violates");
-      if (shouldFallback) {
-        upsertInscripcion(resolvedEmail || resolvedUserId, curso_id, "activo");
-        if (resolvedEmail) {
-          const idx = devIntereses.findIndex((i) => i.email === resolvedEmail && i.curso_id === curso_id);
-          if (idx >= 0) devIntereses.splice(idx, 1);
-          await supabase.from("intereses").delete().eq("email", resolvedEmail).eq("course_id", curso_id);
-        }
-        return NextResponse.json({ ok: true });
-      }
+      console.error("Error approving inscription:", cursoError);
       return NextResponse.json({ ok: false, error: cursoError.message }, { status: 500 });
     }
 
+    // 2. Clean up from intereses
     if (resolvedEmail) {
       await supabase.from("intereses").delete().eq("email", resolvedEmail).eq("course_id", curso_id);
+      await supabase.from("intereses").delete().eq("email", resolvedEmail).eq("curso_id", curso_id);
     }
     
-    // Actualizar metadata del usuario aprobado (para que legajos muestre nombre y apellido)
-    try {
-      const targetNombre = nombre || (resolvedEmail ? (devPerfiles.find(p => p.email.toLowerCase() === resolvedEmail)?.nombre || "") : "");
-      const targetApellido = apellido || (resolvedEmail ? (devPerfiles.find(p => p.email.toLowerCase() === resolvedEmail)?.apellido || "") : "");
-      if (targetNombre || targetApellido) {
-        await supabase.auth.admin.updateUserById(resolvedUserId, { user_metadata: { nombre: targetNombre, apellido: targetApellido } } as any);
+    // 3. Update user metadata if provided
+    if (nombre || apellido) {
+      try {
+        await supabase.auth.admin.updateUserById(resolvedUserId, { 
+          user_metadata: { 
+            nombre: nombre || undefined, 
+            apellido: apellido || undefined 
+          } 
+        });
+      } catch (e) {
+        console.error("Error updating user metadata:", e);
       }
-    } catch {}
+    }
 
     return NextResponse.json({ ok: true });
 
   } catch (error: any) {
-    return NextResponse.json({ ok: false, error: error?.message || "Error" }, { status: 500 });
+    console.error("Critical error in /api/admin/approve:", error);
+    return NextResponse.json({ ok: false, error: error?.message || "Error interno" }, { status: 500 });
   }
 }

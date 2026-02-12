@@ -62,21 +62,15 @@ export default function CursoCard({ curso, professor, estadoCurso, isAdminView =
 
         <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-4">
           <Users className="w-4 h-4 mr-1" />
-          <span>{professor}</span>
+          <span>{professor || "Profesor a asignar"}</span>
         </div>
 
-        {curso.precio && (
+        {(curso.precio !== undefined && curso.precio !== null) && (
           <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-4">
             <Star className="w-4 h-4 mr-1" />
-            {isAdminView ? (
-              <span className="font-semibold text-green-600 dark:text-green-400">
-                ${curso.precio.toLocaleString()}
-              </span>
-            ) : (
-              <span className="text-gray-500 dark:text-gray-400">
-                Consultar al administrativo
-              </span>
-            )}
+            <span className="font-semibold text-green-600 dark:text-green-400">
+              {curso.precio === 0 ? "Gratis / Bonificado" : `$${curso.precio.toLocaleString()}`}
+            </span>
           </div>
         )}
 

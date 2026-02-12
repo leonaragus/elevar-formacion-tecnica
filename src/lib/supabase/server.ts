@@ -4,10 +4,19 @@ import { cookies } from "next/headers";
 function getSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  // Evitar romper la app si faltan env: usar valores dummy
-  const safeUrl = url || "https://dummy.supabase.co";
-  const safeAnon = anonKey || "invalid-key";
-  return { url: safeUrl, anonKey: safeAnon };
+
+  if (!url || !anonKey) {
+    console.error("CRITICAL: Missing Supabase environment variables!");
+    // En producción (Vercel), queremos que falle fuerte si no están
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error("Missing Supabase environment variables in production");
+    }
+  }
+
+  return { 
+    url: url || "https://dummy.supabase.co", 
+    anonKey: anonKey || "invalid-key" 
+  };
 }
 
 /**

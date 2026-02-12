@@ -93,6 +93,12 @@ class PushNotificationService {
   async subscribeToCourse(cursoId: string, accessToken?: string): Promise<PushSubscriptionData | null> {
     if (!this.swRegistration) {
       console.error('Service Worker not registered');
+      await this.initialize();
+      if (!this.swRegistration) return null;
+    }
+
+    if (!this.vapidPublicKey) {
+      console.error('VAPID public key is missing');
       return null;
     }
 
@@ -105,14 +111,22 @@ class PushNotificationService {
     }
 
     try {
+      console.log('Subscribing to push notifications...');
       // Convert VAPID public key to Uint8Array
       const applicationServerKey = this.urlBase64ToUint8Array(this.vapidPublicKey);
 
-      // Subscribe to push notifications
-      const subscription = await this.swRegistration.pushManager.subscribe({
+      // Subscribe to push notifications with a timeout
+      const subscribePromise = this.swRegistration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: applicationServerKey
       });
+
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Push subscription timeout')), 10000)
+      );
+
+      const subscription = await Promise.race([subscribePromise, timeoutPromise]) as PushSubscription;
+      console.log('Push subscription successful:', subscription);
 
       const subscriptionData: PushSubscriptionData = {
         endpoint: subscription.endpoint,

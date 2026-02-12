@@ -1,11 +1,58 @@
 // VideoPlayer simple con soporte para dividir en dos partes
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+
+function parsearTiempoSrt(tiempo: string): number {
+  const [tiempoParte] = tiempo.split(',');
+  const [horas, minutos, segundos] = tiempoParte.split(':').map(Number);
+  return horas * 3600 + minutos * 60 + segundos;
+}
 
 interface TranscripcionItem {
   tiempo: number;
   texto: string;
+}
+
+function parsearSrt(srt: string): TranscripcionItem[] {
+  const lineas = srt.trim().split('\n');
+  const items: TranscripcionItem[] = [];
+  
+  for (let i = 0; i < lineas.length; i++) {
+    if (lineas[i].match(/^\d+$/)) {
+      const tiempoLinea = lineas[i + 1];
+      const textoLineas = [];
+      
+      i += 2;
+      while (i < lineas.length && lineas[i].trim() !== '') {
+        textoLineas.push(lineas[i]);
+        i++;
+      }
+      
+      if (tiempoLinea && textoLineas.length > 0) {
+        const [inicio] = tiempoLinea.split(' --> ');
+        const tiempo = parsearTiempoSrt(inicio);
+        
+        items.push({
+          tiempo,
+          texto: textoLineas.join(' ')
+        });
+      }
+    }
+  }
+  
+  return items;
+}
+
+function parsearTexto(texto: string): TranscripcionItem[] {
+  const oraciones = texto.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  const duracionEstimada = 600;
+  const tiempoPorOracion = oraciones.length > 0 ? duracionEstimada / oraciones.length : 0;
+  
+  return oraciones.map((oracion, index) => ({
+    tiempo: index * tiempoPorOracion,
+    texto: oracion.trim()
+  }));
 }
 
 interface VideoPlayerProps {
@@ -25,51 +72,46 @@ export default function VideoPlayer({
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [tiempoActual, setTiempoActual] = useState(0);
+  const [videoDuracion, setVideoDuracion] = useState<number | null>(null);
   const [estaReproduciendo, setEstaReproduciendo] = useState(false);
-  const [transcripcionParseada, setTranscripcionParseada] = useState<TranscripcionItem[]>([]);
-  const [indiceActual, setIndiceActual] = useState(0);
+  const transcripcionParseada = useMemo(() => {
+    if (transcripcionSrt) return parsearSrt(transcripcionSrt);
+    if (transcripcionTexto) return parsearTexto(transcripcionTexto);
+    return [];
+  }, [transcripcionTexto, transcripcionSrt]);
+  const indiceActual = useMemo(() => {
+    if (transcripcionParseada.length === 0) return 0;
+    let indice = 0;
+    for (let i = 0; i < transcripcionParseada.length; i++) {
+      if (tiempoActual >= transcripcionParseada[i].tiempo) {
+        indice = i;
+      } else {
+        break;
+      }
+    }
+    return indice;
+  }, [tiempoActual, transcripcionParseada]);
   const [busqueda, setBusqueda] = useState('');
   const [mostrarTranscripcion, setMostrarTranscripcion] = useState(true);
   const [videoBlobUrl, setVideoBlobUrl] = useState<string>(videoUrl);
-  const [cargando, setCargando] = useState(false);
-  const [esMultipart, setEsMultipart] = useState(false);
-
-  // Parsear transcripción SRT o texto plano
-  useEffect(() => {
-    if (transcripcionSrt) {
-      setTranscripcionParseada(parsearSrt(transcripcionSrt));
-    } else if (transcripcionTexto) {
-      setTranscripcionParseada(parsearTexto(transcripcionTexto));
-    }
-  }, [transcripcionTexto, transcripcionSrt]);
+  const esMultipart = !!videoUrlParte2;
 
   // Unir las dos partes del video si existe la segunda parte
   useEffect(() => {
-    if (videoUrlParte2) {
-      setCargando(true);
-      setEsMultipart(true);
-      
-      // Unir las dos partes
-      Promise.all([
-        fetch(videoUrl).then(r => r.blob()),
-        fetch(videoUrlParte2).then(r => r.blob())
-      ])
-      .then(([blob1, blob2]) => {
-        const blob = new Blob([blob1, blob2], { type: 'video/mp4' });
-        const url = URL.createObjectURL(blob);
-        setVideoBlobUrl(url);
-        setCargando(false);
-      })
-      .catch(err => {
-        console.error('Error al unir partes:', err);
-        setVideoBlobUrl(videoUrl); // Fallback a la primera parte
-        setCargando(false);
-        setEsMultipart(false);
-      });
-    } else {
-      setVideoBlobUrl(videoUrl);
-      setEsMultipart(false);
-    }
+    if (!videoUrlParte2) return;
+    Promise.all([
+      fetch(videoUrl).then(r => r.blob()),
+      fetch(videoUrlParte2).then(r => r.blob())
+    ])
+    .then(([blob1, blob2]) => {
+      const blob = new Blob([blob1, blob2], { type: 'video/mp4' });
+      const url = URL.createObjectURL(blob);
+      setVideoBlobUrl(url);
+    })
+    .catch(err => {
+      console.error('Error al unir partes:', err);
+      setVideoBlobUrl(videoUrl); // Fallback a la primera parte
+    });
   }, [videoUrl, videoUrlParte2]);
 
   // Actualizar tiempo actual del video
@@ -80,81 +122,22 @@ export default function VideoPlayer({
     const actualizarTiempo = () => {
       setTiempoActual(video.currentTime);
     };
+    const actualizarDuracion = () => {
+      setVideoDuracion(Number.isFinite(video.duration) ? video.duration : null);
+    };
 
     video.addEventListener('timeupdate', actualizarTiempo);
+    video.addEventListener('loadedmetadata', actualizarDuracion);
     video.addEventListener('play', () => setEstaReproduciendo(true));
     video.addEventListener('pause', () => setEstaReproduciendo(false));
 
     return () => {
       video.removeEventListener('timeupdate', actualizarTiempo);
+      video.removeEventListener('loadedmetadata', actualizarDuracion);
       video.removeEventListener('play', () => setEstaReproduciendo(true));
       video.removeEventListener('pause', () => setEstaReproduciendo(false));
     };
   }, [videoBlobUrl]);
-
-  // Encontrar índice actual en la transcripción
-  useEffect(() => {
-    if (transcripcionParseada.length === 0) return;
-
-    let indice = 0;
-    for (let i = 0; i < transcripcionParseada.length; i++) {
-      if (tiempoActual >= transcripcionParseada[i].tiempo) {
-        indice = i;
-      } else {
-        break;
-      }
-    }
-    setIndiceActual(indice);
-  }, [tiempoActual, transcripcionParseada]);
-
-  // Funciones de utilidad
-  const parsearSrt = (srt: string): TranscripcionItem[] => {
-    const lineas = srt.trim().split('\n');
-    const items: TranscripcionItem[] = [];
-    
-    for (let i = 0; i < lineas.length; i++) {
-      if (lineas[i].match(/^\d+$/)) { // Número de subtítulo
-        const tiempoLinea = lineas[i + 1];
-        const textoLineas = [];
-        
-        i += 2;
-        while (i < lineas.length && lineas[i].trim() !== '') {
-          textoLineas.push(lineas[i]);
-          i++;
-        }
-        
-        if (tiempoLinea && textoLineas.length > 0) {
-          const [inicio] = tiempoLinea.split(' --> ');
-          const tiempo = parsearTiempoSrt(inicio);
-          
-          items.push({
-            tiempo,
-            texto: textoLineas.join(' ')
-          });
-        }
-      }
-    }
-    
-    return items;
-  };
-
-  const parsearTexto = (texto: string): TranscripcionItem[] => {
-    // Dividir el texto en oraciones aproximadamente cada 10 segundos
-    const oraciones = texto.split(/[.!?]+/).filter(s => s.trim().length > 0);
-    const duracionEstimada = 600; // 10 minutos por defecto
-    const tiempoPorOracion = duracionEstimada / oraciones.length;
-    
-    return oraciones.map((oracion, index) => ({
-      tiempo: index * tiempoPorOracion,
-      texto: oracion.trim()
-    }));
-  };
-
-  const parsearTiempoSrt = (tiempo: string): number => {
-    const [tiempoParte] = tiempo.split(',');
-    const [horas, minutos, segundos] = tiempoParte.split(':').map(Number);
-    return horas * 3600 + minutos * 60 + segundos;
-  };
 
   const formatearTiempo = (segundos: number): string => {
     const min = Math.floor(segundos / 60);
@@ -217,22 +200,6 @@ export default function VideoPlayer({
     }
   };
 
-  if (cargando) {
-    return (
-      <div className="w-full max-w-4xl mx-auto p-4 bg-white rounded-lg shadow-lg">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Cargando video...</p>
-            {esMultipart && (
-              <p className="text-sm text-gray-500 mt-2">Uniendo 2 partes</p>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-6xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-6">{titulo}</h1>
@@ -262,7 +229,7 @@ export default function VideoPlayer({
           {/* Controles adicionales */}
           <div className="mt-4 flex items-center gap-4">
             <span className="text-sm text-gray-600">
-              {formatearTiempo(tiempoActual)} / {videoRef.current?.duration ? formatearTiempo(videoRef.current.duration) : '--:--'}
+              {formatearTiempo(tiempoActual)} / {videoDuracion ? formatearTiempo(videoDuracion) : '--:--'}
               {esMultipart && (
                 <span className="ml-2 bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
                   2 partes

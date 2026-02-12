@@ -10,7 +10,8 @@ import {
   Settings,
   BarChart2,
   X,
-  Calendar
+  Calendar,
+  Video
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -34,6 +35,12 @@ const menuItems = [
     href: "/cursos",
     icon: BookOpen,
     description: "Mis cursos activos"
+  },
+  {
+    name: "Clases Grabadas",
+    href: "/mis-clases",
+    icon: Video,
+    description: "Videos de clases"
   },
   {
     name: "Calendario",
@@ -70,9 +77,17 @@ const menuItems = [
 export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const pathname = usePathname();
   const [showLegajos, setShowLegajos] = useState(false);
-  const [studentEmail] = useState<string | null>(() => readLocalStorage("student_email"));
-  const [studentOk] = useState(() => readLocalStorage("student_ok") === "1");
+  const [studentEmail, setStudentEmail] = useState<string | null>(null);
+  const [studentOk, setStudentOk] = useState(false);
   const [hasActiveEnrollment, setHasActiveEnrollment] = useState<boolean | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    // Cargar datos de localStorage solo en el cliente
+    setStudentEmail(readLocalStorage("student_email"));
+    setStudentOk(readLocalStorage("student_ok") === "1");
+  }, []);
   const [materialesCount, setMaterialesCount] = useState<number | null>(null);
   const [materialesNewCount, setMaterialesNewCount] = useState<number>(0);
   useEffect(() => {
@@ -118,7 +133,7 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
 
   const restrictedByCookie = Boolean(studentEmail && !studentOk);
   const restrictedByUser = hasActiveEnrollment === false;
-  const visibleMenuItems = restrictedByCookie || restrictedByUser ? menuItems.slice(0, 1) : menuItems;
+  const visibleMenuItems = !isMounted ? menuItems.slice(0, 1) : (restrictedByCookie || restrictedByUser ? menuItems.slice(0, 1) : menuItems);
 
   return (
     <>

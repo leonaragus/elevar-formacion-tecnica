@@ -21,8 +21,10 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
   const [darkMode, setDarkMode] = useState(false);
   const { user, signOut, loading } = useAuth();
   const [studentOk, setStudentOk] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
     // Verificar si hay sesión de alumno "aprobado" en localStorage
     const checkStudent = () => {
       if (typeof window !== "undefined") {
@@ -113,7 +115,7 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
           </button>
 
           {/* Estado de autenticación */}
-          {loading ? (
+          {!isMounted || loading ? (
             <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
           ) : user || studentOk ? (
             <div className="flex items-center gap-2">

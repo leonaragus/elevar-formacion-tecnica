@@ -1,17 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 
 function getSupabaseAdminEnv() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://dummy.supabase.co";
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const hasValidService = typeof serviceKey === "string" && serviceKey.length > 20;
-  const key = hasValidService ? serviceKey : anonKey;
-  if (!key) {
-      console.warn("Falta SUPABASE_SERVICE_ROLE_KEY y ANON_KEY");
-      // Fallback dummy key to prevent crash, but calls will fail
-      return { url, key: "invalid-key" };
-  }
-  return { url, key };
+  if (!url) throw new Error("Supabase URL faltante");
+  if (!serviceKey || !serviceKey.startsWith("eyJ")) throw new Error("Supabase Service Role Key inválida o faltante");
+  return { url, key: serviceKey };
 }
 
 export function createSupabaseAdminClient() {

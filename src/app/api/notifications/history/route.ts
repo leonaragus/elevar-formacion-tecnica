@@ -4,13 +4,15 @@ import { cookies } from 'next/headers';
 
 export async function GET(request: Request) {
   try {
+    const authHeader = request.headers.get('Authorization');
     const cookieStore = cookies();
+    const token = authHeader?.replace('Bearer ', '') || cookieStore.get('sb-access-token')?.value;
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
     
-    const token = cookieStore.get('sb-access-token')?.value;
     if (!token) {
       return NextResponse.json(
         { error: 'Unauthorized' },
