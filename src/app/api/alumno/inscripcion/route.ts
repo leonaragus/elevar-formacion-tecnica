@@ -71,16 +71,17 @@ export async function POST(req: NextRequest) {
           console.log(`Intentando insertar en intereses (auth) para ${email} curso ${curso_id}`);
           const { error: intErr } = await supabaseAdmin
             .from("intereses")
-            .insert({ 
+            .upsert({ 
               email, 
               course_id: curso_id, 
               created_at: new Date().toISOString() 
-            });
+            }, { onConflict: "email,course_id" });
+          
           if (intErr) {
             console.error("Error al insertar en intereses (auth):", intErr);
             dbError = intErr.message;
           } else {
-            console.log("Inserción exitosa en intereses (auth)");
+            console.log("Inserción/Upsert exitosa en intereses (auth)");
             wroteDb = true;
           }
         } catch (e: any) {
@@ -92,7 +93,12 @@ export async function POST(req: NextRequest) {
         const { error } = await supabaseAdmin
           .from("cursos_alumnos")
           .upsert(
-            { user_id: user.id, curso_id, estado: "pendiente" }, 
+            { 
+              user_id: user.id, 
+              curso_id, 
+              estado: "pendiente",
+              created_at: new Date().toISOString() 
+            }, 
             { onConflict: "curso_id,user_id", ignoreDuplicates: false }
           );
         
@@ -161,10 +167,14 @@ export async function POST(req: NextRequest) {
           console.log(`Intentando insertar en intereses (unauth) para ${email} curso ${curso_id}`);
           const { error: errInt } = await supabaseAdmin
             .from("intereses")
-            .insert({ email, course_id: curso_id, created_at: new Date().toISOString() });
+            .upsert({ 
+              email, 
+              course_id: curso_id, 
+              created_at: new Date().toISOString() 
+            }, { onConflict: "email,course_id" });
 
           if (!errInt || errInt.message.includes("duplicate") || errInt.message.includes("violates")) {
-             console.log("Inserción exitosa o ya existía en intereses (unauth)");       
+             console.log("Inserción/Upsert exitosa o ya existía en intereses (unauth)");       
              wroteDb = true;
           } else {
              console.error("Error al insertar en intereses (unauth):", errInt);

@@ -87,12 +87,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "No se pudo resolver el usuario (email o ID inválido)" }, { status: 400 });
     }
 
-    // 1. Upsert into cursos_alumnos as active
+    // 1. Crear/Actualizar Legajo
+    const { error: legajoError } = await supabase.from("legajos").upsert({
+      alumno_id: resolvedUserId,
+      email: resolvedEmail || "",
+      nombre: nombre || "Alumno",
+      apellido: apellido || "Nuevo",
+      estado: "activo",
+    }, { onConflict: "email" });
+
+    if (legajoError) {
+      console.error("Legajo error", legajoError);
+    }
+
+    // 2. Upsert into cursos_alumnos as active
     const { error: cursoError } = await supabase.from("cursos_alumnos").upsert({
       user_id: resolvedUserId,
       curso_id,
-      estado: "activo",
-      updated_at: new Date().toISOString()
+      estado: "activo"
     }, { onConflict: "curso_id,user_id" });
 
     if (cursoError) {

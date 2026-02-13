@@ -59,13 +59,13 @@ export default async function AdminDashboardPage() {
     // También traer de intereses (solicitudes por email)
     const { data: intereses, error: errorIntereses } = await client
       .from("intereses")
-      .select("email, course_id, curso_id, created_at")
+      .select("email, course_id, created_at")
       .limit(100);
 
     if (Array.isArray(intereses) && intereses.length > 0 && !errorIntereses) {
       const mapped = intereses.map((i: any) => ({
         user_id: i.email,
-        curso_id: i.course_id || i.curso_id,
+        curso_id: i.course_id,
         curso_titulo: null,
         user_email: i.email,
         estado: "pendiente",

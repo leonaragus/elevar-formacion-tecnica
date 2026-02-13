@@ -94,19 +94,18 @@ class PushNotificationService {
     if (!this.swRegistration) {
       console.error('Service Worker not registered');
       await this.initialize();
-      if (!this.swRegistration) return null;
+      if (!this.swRegistration) throw new Error('No se pudo inicializar el Service Worker');
     }
 
     if (!this.vapidPublicKey) {
       console.error('VAPID public key is missing');
-      return null;
+      throw new Error('Configuración de notificaciones incompleta (VAPID)');
     }
 
     if (this.getPermissionStatus() !== 'granted') {
       const permission = await this.requestPermission();
       if (permission !== 'granted') {
-        console.log('Notification permission denied');
-        return null;
+        throw new Error('Permiso de notificaciones denegado');
       }
     }
 
@@ -122,7 +121,7 @@ class PushNotificationService {
       });
 
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Push subscription timeout')), 10000)
+        setTimeout(() => reject(new Error('Tiempo de espera agotado al suscribir')), 15000)
       );
 
       const subscription = await Promise.race([subscribePromise, timeoutPromise]) as PushSubscription;
@@ -137,15 +136,11 @@ class PushNotificationService {
       };
 
       // Send subscription to server
-      const success = await this.sendSubscriptionToServer(subscriptionData, cursoId, accessToken);
-      if (success) {
-        return subscriptionData;
-      }
-
-      return null;
-    } catch (error) {
+      await this.sendSubscriptionToServer(subscriptionData, cursoId, accessToken);
+      return subscriptionData;
+    } catch (error: any) {
       console.error('Failed to subscribe to push notifications:', error);
-      return null;
+      throw error;
     }
   }
 
@@ -217,10 +212,16 @@ class PushNotificationService {
         })
       });
 
-      return response.ok;
-    } catch (error) {
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Server error during subscription:', errorData);
+        throw new Error(errorData.error || `Error del servidor: ${response.status}`);
+      }
+
+      return true;
+    } catch (error: any) {
       console.error('Failed to send subscription to server:', error);
-      return false;
+      throw error;
     }
   }
 
@@ -247,18 +248,30 @@ class PushNotificationService {
 
   // Convert URL base64 to Uint8Array
   private urlBase64ToUint8Array(base64String: string): Uint8Array {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding)
+    if (!base64String) {
+      throw new Error('VAPID public key is empty');
+    }
+    
+    // Limpiar la clave de posibles espacios o comillas
+    const cleanKey = base64String.trim().replace(/['"]/g, '');
+    
+    const padding = '='.repeat((4 - cleanKey.length % 4) % 4);
+    const base64 = (cleanKey + padding)
       .replace(/\-/g, '+')
       .replace(/_/g, '/');
 
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
+    try {
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
 
-    for (let i = 0; i < rawData.length; ++i) {
-      outputArray[i] = rawData.charCodeAt(i);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+    } catch (e) {
+      console.error('Error decoding VAPID key with atob. Key length:', cleanKey.length, 'Base64 length:', base64.length);
+      throw new Error('La clave VAPID no tiene un formato Base64 válido. Verifica las variables de entorno.');
     }
-    return outputArray;
   }
 
   // Send a test notification

@@ -115,10 +115,12 @@ export async function POST(req: NextRequest) {
       return res;
     }
 
+    // Si no tiene cursos activos, no debería entrar como alumno "ok"
     const res = withStudentEmail(
       NextResponse.json({ ok: true, redirect: "/cursos", student_email: normalizedEmail, student_ok: false, student_course_id: null as string | null })
     );
-    clearApprovedCookies(res);
+    res.cookies.set("student_ok", "0", { path: "/", maxAge: 0 });
+    res.cookies.set("student_course_id", "", { path: "/", maxAge: 0 });
     return res;
     
   } catch (error) {

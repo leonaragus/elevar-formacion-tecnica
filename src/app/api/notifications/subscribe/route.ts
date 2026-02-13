@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getApiUser } from '@/lib/api-auth';
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -18,36 +19,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the current user from the request
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-      return NextResponse.json(
-        { error: 'Authorization header required' },
-        { status: 401 }
-      );
-    }
+    // Get the current user using our helper
+    const { user } = await getApiUser(request);
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json(
-        { error: 'Invalid authentication' },
+        { error: 'No autorizado' },
         { status: 401 }
       );
     }
 
     // Check if user is enrolled in the course
+    // Si el user.id es un email (cookie_only), usamos eso para buscar
+    console.log('Verificando inscripción para:', { userId: user.id, email: user.email, cursoId: curso_id });
+    
     const { data: enrollment, error: enrollmentError } = await supabase
       .from('cursos_alumnos')
-      .select('id')
+      .select('id, user_id, email, estado')
       .eq('curso_id', curso_id)
-      .eq('alumno_id', user.id)
-      .single();
+      .or(`user_id.eq."${user.id}",email.eq."${user.email}"`)
+      .eq('estado', 'activo')
+      .maybeSingle();
 
     if (enrollmentError || !enrollment) {
+      console.error('Error de inscripción o no encontrado:', enrollmentError, enrollment);
       return NextResponse.json(
-        { error: 'User not enrolled in this course' },
+        { error: 'User not enrolled in this course or enrollment not active' },
         { status: 403 }
       );
     }
@@ -58,7 +55,7 @@ export async function POST(request: NextRequest) {
       .select('id')
       .eq('user_id', user.id)
       .eq('curso_id', curso_id)
-      .single();
+      .maybeSingle();
 
     if (existingSubscription) {
       // Update existing subscription

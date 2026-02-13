@@ -75,8 +75,12 @@ export async function GET(req: NextRequest) {
     // 2. Intereses (solicitudes por email)
     const { data: intereses, error: intErr } = await supabase
       .from("intereses")
-      .select("email, course_id, curso_id, created_at")
+      .select("email, course_id, created_at")
       .limit(200);
+
+    if (intErr) {
+      console.error("Error fetching intereses:", intErr);
+    }
 
     type PendingInscripcion = {
       user_id: string;
@@ -97,8 +101,10 @@ export async function GET(req: NextRequest) {
     if (intereses) {
       const mapped = intereses.map((i: any) => ({
         user_id: i.email,
-        curso_id: i.course_id || i.curso_id,
+        curso_id: i.course_id,
         user_email: i.email,
+        nombre: "",
+        apellido: "",
         estado: "pendiente",
         source: "intereses",
         created_at: i.created_at
@@ -144,6 +150,7 @@ export async function GET(req: NextRequest) {
     const enriched = unique.map(item => {
       const isEmail = item.user_id.includes('@');
       const email = isEmail ? item.user_id : (userInfo[item.user_id]?.email || item.user_id);
+      
       const nombre = isEmail ? "" : (userInfo[item.user_id]?.nombre || "");
       const apellido = isEmail ? "" : (userInfo[item.user_id]?.apellido || "");
       
@@ -197,8 +204,7 @@ export async function POST(req: NextRequest) {
       .upsert({ 
         user_id: targetUserId, 
         curso_id, 
-        estado: "activo",
-        updated_at: new Date().toISOString()
+        estado: "activo"
       }, { onConflict: "curso_id,user_id" });
 
     if (upsertError) {

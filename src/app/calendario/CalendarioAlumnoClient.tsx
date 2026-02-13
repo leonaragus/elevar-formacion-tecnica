@@ -63,11 +63,41 @@ export default function CalendarioAlumnoClient() {
 
   const cargarEntregas = async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
+
+      // Si no hay usuario, buscar curso en cookies
+      let userCourseIds: string[] = [];
+      
+      if (user) {
+        const { data: inscripciones } = await supabase
+          .from('cursos_alumnos')
+          .select('curso_id')
+          .eq('user_id', user.id)
+          .eq('estado', 'activo');
+        if (inscripciones) {
+          userCourseIds = inscripciones.map(i => String(i.curso_id));
+        }
+      } else {
+        // Fallback a cookies si no hay sesión Auth activa
+        const cookies = document.cookie.split('; ');
+        const studentOk = cookies.find(c => c.trim().startsWith('student_ok='))?.split('=')[1] === '1';
+        const studentCourseId = cookies.find(c => c.trim().startsWith('student_course_id='))?.split('=')[1];
+        if (studentOk && studentCourseId) {
+          userCourseIds = [String(studentCourseId)];
+        }
+      }
+
+      if (userCourseIds.length === 0) {
+        setEntregas([]);
+        return;
+      }
+
       const { data: entregasData, error } = await supabase
         .from('calendario_entregas')
         .select(`
           *,
-          cursos!inner(nombre),
+          cursos!inner(titulo),
           entrega_alumno:entregas_alumnos!left(
             estado,
             fecha_entrega,
@@ -75,10 +105,18 @@ export default function CalendarioAlumnoClient() {
           )
         `)
         .eq('activo', true)
+        .in('curso_id', userCourseIds)
         .order('fecha_entrega', { ascending: true });
 
       if (error) throw error;
-      setEntregas(entregasData || []);
+      
+      // Mapear 'titulo' a 'nombre' para mantener compatibilidad con la interfaz FechaEntrega si es necesario
+      const mappedData = (entregasData || []).map((e: any) => ({
+        ...e,
+        cursos: { nombre: e.cursos?.titulo || 'Curso' }
+      }));
+
+      setEntregas(mappedData);
     } catch (error) {
       console.error('Error cargando entregas:', error);
       alert('Error al cargar las entregas');

@@ -51,8 +51,9 @@ export default function PushNotificationToggle({ cursoId, className = "" }: Push
 
   const checkSubscriptionStatus = async () => {
     try {
+      let token: string | undefined;
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      token = session?.access_token;
 
       const response = await fetch(`/api/notifications/status?curso_id=${cursoId}`, {
         headers: {
@@ -64,6 +65,10 @@ export default function PushNotificationToggle({ cursoId, className = "" }: Push
         const data = await response.json();
         setSubscriptionStatus(data.subscribed ? 'subscribed' : 'unsubscribed');
         setIsEnabled(data.subscribed);
+      } else if (response.status === 401) {
+        // No autorizado suele significar que no hay sesión ni cookie válida
+        setSubscriptionStatus('unsubscribed');
+        setIsEnabled(false);
       } else {
         setSubscriptionStatus('unsubscribed');
       }
@@ -78,17 +83,15 @@ export default function PushNotificationToggle({ cursoId, className = "" }: Push
 
     setIsLoading(true);
     try {
+      let token: string | undefined;
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      token = session?.access_token;
 
-      if (!token) {
-        throw new Error('Debes iniciar sesión para activar las notificaciones');
-      }
+      // Si no hay token, la API intentará usar la cookie automáticamente.
+      // El helper getApiUser se encarga de eso.
 
       if (isEnabled) {
-        // Unsubscribe usando el servicio
         const success = await unsubscribeFromCourseNotifications(cursoId, token);
-
         if (success) {
           setIsEnabled(false);
           setSubscriptionStatus('unsubscribed');
@@ -96,24 +99,17 @@ export default function PushNotificationToggle({ cursoId, className = "" }: Push
           throw new Error('No se pudo cancelar la suscripción');
         }
       } else {
-        // Subscribe usando el servicio
         const subscription = await subscribeToCourseNotifications(cursoId, token);
-
         if (subscription) {
           setIsEnabled(true);
           setSubscriptionStatus('subscribed');
         } else {
-          // Si el permiso fue denegado, el servicio devuelve null
-          if (getNotificationPermission() === 'denied') {
-            alert('Has denegado el permiso para notificaciones. Por favor, actívalo en la configuración de tu navegador.');
-          } else {
-            throw new Error('No se pudo activar la suscripción. Verifica que tu navegador soporte notificaciones push.');
-          }
+          throw new Error('No se pudo activar la suscripción');
         }
       }
-    } catch (error) {
-      console.error('Error toggling subscription:', error);
-      alert(error instanceof Error ? error.message : 'Error al cambiar el estado de suscripción');
+    } catch (error: any) {
+      console.error('Error toggling notifications:', error);
+      alert(error.message || 'Error al actualizar las notificaciones');
     } finally {
       setIsLoading(false);
     }

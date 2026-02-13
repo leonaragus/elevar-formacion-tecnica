@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getApiUser } from '@/lib/api-auth';
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -19,21 +20,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get the current user from the request
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-      return NextResponse.json(
-        { error: 'Authorization header required' },
-        { status: 401 }
-      );
-    }
+    // Get the current user using our helper
+    const { user } = await getApiUser(request);
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json(
-        { error: 'Invalid authentication' },
+        { error: 'No autorizado' },
         { status: 401 }
       );
     }
@@ -44,7 +36,7 @@ export async function GET(request: NextRequest) {
       .select('id')
       .eq('user_id', user.id)
       .eq('curso_id', cursoId)
-      .single();
+      .maybeSingle();
 
     return NextResponse.json({ 
       subscribed: !!subscription,

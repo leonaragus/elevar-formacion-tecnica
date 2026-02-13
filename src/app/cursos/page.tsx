@@ -66,7 +66,7 @@ export default async function CursosPage(props: { searchParams: Promise<{ solici
 
   // 1. Resolve enrollment via Cookie or DB (if no User)
   if (!user) {
-    // Try to resolve via email if present
+    // Si no hay usuario y studentOk es false, no debería haber acceso a cursos privados
     if (studentEmail) {
       let adminClient: any = null;
       try { adminClient = createSupabaseAdminClient(); } catch { adminClient = null; }
@@ -114,9 +114,8 @@ export default async function CursosPage(props: { searchParams: Promise<{ solici
       }
     }
 
-    // Cookie Override: if login says we are ok, we are ok.
-    // We do this OUTSIDE the studentEmail check to ensure it works even if email cookie is missing/broken
-    if (studentOk && typeof studentCourseId === "string" && studentCourseId) {
+    // Cookie Override: solo si la base de datos no devolvió nada (fallback para offline/cache)
+    if (!hasActive && !hasPending && studentOk && typeof studentCourseId === "string" && studentCourseId) {
         hasActive = true;
         if (!activeCourseIds.includes(studentCourseId)) {
           activeCourseIds.push(studentCourseId);
@@ -174,22 +173,30 @@ export default async function CursosPage(props: { searchParams: Promise<{ solici
         hasPending = hasPending || pendingFromInsc.length > 0;
         pendingCourseIds = [...new Set([...pendingCourseIds, ...pendingFromInsc])];
         enrolledIds = [...new Set([...activeCourseIds, ...pendingCourseIds])];
+    } else {
+        // IMPORTANTE: Si el usuario existe en Auth pero NO tiene inscripciones en DB,
+        // debemos forzar hasActive a false para evitar que use cookies viejas.
+        hasActive = false;
+        activeCourseIds = [];
+        enrolledIds = [];
     }
 
-    // Devstore Fallback (Auth User)
-    const devInsc = devInscripciones.filter(i => i.user_id === user.id);
-    devInsc.forEach(i => {
-      if (!enrolledIds.includes(i.curso_id)) {
-        enrolledIds.push(i.curso_id);
-        if (i.estado === "activo") {
-          activeCourseIds.push(i.curso_id);
-          hasActive = true;
-        } else {
-          pendingCourseIds.push(i.curso_id);
-          hasPending = true;
-        }
-      }
-    });
+    // Devstore Fallback (Auth User) - Solo si no encontramos nada en DB real
+    if (!hasActive && !hasPending) {
+        const devInsc = devInscripciones.filter(i => i.user_id === user.id);
+        devInsc.forEach(i => {
+          if (!enrolledIds.includes(i.curso_id)) {
+            enrolledIds.push(i.curso_id);
+            if (i.estado === "activo") {
+              activeCourseIds.push(i.curso_id);
+              hasActive = true;
+            } else {
+              pendingCourseIds.push(i.curso_id);
+              hasPending = true;
+            }
+          }
+        });
+    }
   }
   
   // 3. Fetch Active Courses
@@ -295,8 +302,7 @@ export default async function CursosPage(props: { searchParams: Promise<{ solici
   if (hasActive && cursosActivos.length === 0) {
     // Solo reseteamos si tampoco hay pendientes que bloqueen
     if (!hasPending) {
-       // Reset state to allow showing available courses
-       // No cambiamos hasActive a false variable directamente porque se usa en render, pero re-llenamos disponibles
+       hasActive = false; // Reset hasActive since no real courses were found
        disponibles = baseDisponibles.filter((c) => !enrolledIds.includes(c.id));
     }
   }
