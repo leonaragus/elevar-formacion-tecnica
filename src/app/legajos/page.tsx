@@ -27,8 +27,9 @@ export default function LegajosPage() {
   const [mutatingId, setMutatingId] = useState<string | null>(null);
 
   useEffect(() => {
+    let mounted = true;
     const run = async () => {
-      setLoading(true);
+      if (mounted) setLoading(true);
       const supabase = createSupabaseBrowserClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.id) {
@@ -39,19 +40,19 @@ export default function LegajosPage() {
           .eq("curso_id", "gestion-documental")
           .eq("estado", "activo")
           .limit(1);
-        setHasGD(Array.isArray(insc) && insc.length > 0);
+        if (mounted) setHasGD(Array.isArray(insc) && insc.length > 0);
       }
       try {
         const me = await fetch("/api/profesor/me");
         const j = await me.json().catch(() => null as any);
-        setIsProf(Boolean(j?.isProf));
+        if (mounted) setIsProf(Boolean(j?.isProf));
       } catch {}
       const { data: estados } = await supabase.from("estados_legajo").select("id,nombre").limit(20);
       const map: Record<number, string> = {};
       (Array.isArray(estados) ? estados : []).forEach((e: any) => {
         map[Number(e.id)] = String(e.nombre);
       });
-      setEstadosMap(map);
+      if (mounted) setEstadosMap(map);
       const { data } = await supabase.from("vista_onboarding").select("*").order("apellido", { ascending: true }).limit(200);
       const list = Array.isArray(data) ? data.map((r: any) => ({
         id: String(r.id),
@@ -62,10 +63,13 @@ export default function LegajosPage() {
         estado: map[Number(r.estado_id ?? 1)] ?? "Borrador",
         foto_url: r.foto_url ?? null,
       })) : [];
-      setItems(list);
-      setLoading(false);
+      if (mounted) {
+        setItems(list);
+        setLoading(false);
+      }
     };
     run();
+    return () => { mounted = false; };
   }, []);
 
   const filtered = items.filter((i) => {

@@ -91,6 +91,7 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const [materialesCount, setMaterialesCount] = useState<number | null>(null);
   const [materialesNewCount, setMaterialesNewCount] = useState<number>(0);
   useEffect(() => {
+    let mounted = true;
     (async () => {
       try {
         const supabase = createSupabaseBrowserClient();
@@ -103,32 +104,41 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
             .eq("estado", "activo")
             .limit(50);
           const rows = Array.isArray(insc) ? insc : [];
-          setHasActiveEnrollment(rows.length > 0);
-          setShowLegajos(rows.some((r: any) => String(r?.curso_id || "") === "gestion-documental"));
+          if (mounted) {
+            setHasActiveEnrollment(rows.length > 0);
+            setShowLegajos(rows.some((r: any) => String(r?.curso_id || "") === "gestion-documental"));
+          }
         } else {
-          setHasActiveEnrollment(null);
+          if (mounted) setHasActiveEnrollment(null);
         }
       } catch {}
     })();
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
+    let mounted = true;
     (async () => {
       try {
         const res = await fetch("/api/alumno/materiales-count", { cache: "no-store" });
         const json = await res.json().catch(() => null as any);
-        if (res.ok && json?.ok) {
-          setMaterialesCount(typeof json.count === "number" ? json.count : 0);
-          setMaterialesNewCount(typeof json.newCount === "number" ? json.newCount : 0);
-        } else {
+        if (mounted) {
+          if (res.ok && json?.ok) {
+            setMaterialesCount(typeof json.count === "number" ? json.count : 0);
+            setMaterialesNewCount(typeof json.newCount === "number" ? json.newCount : 0);
+          } else {
+            setMaterialesCount(0);
+            setMaterialesNewCount(0);
+          }
+        }
+      } catch {
+        if (mounted) {
           setMaterialesCount(0);
           setMaterialesNewCount(0);
         }
-      } catch {
-        setMaterialesCount(0);
-        setMaterialesNewCount(0);
       }
     })();
+    return () => { mounted = false; };
   }, [pathname]);
 
   const restrictedByCookie = Boolean(studentEmail && !studentOk);
@@ -224,6 +234,7 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                   </Link>
                 );
               })}
+              {/* Se oculta el módulo de Legajos por ahora
               {showLegajos && (
                 <Link
                   href="/legajos"
@@ -242,6 +253,7 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                   </div>
                 </Link>
               )}
+              */}
             </div>
           </nav>
 

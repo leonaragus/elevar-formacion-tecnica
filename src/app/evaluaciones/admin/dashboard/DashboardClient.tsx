@@ -111,8 +111,20 @@
                            {r.evaluacion_title || `Evaluación #${r.evaluacion_id}`}
                          </div>
                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                           {r.score != null ? `Score: ${r.score}` : "Sin calificar"} • {new Date(r.created_at).toLocaleString()}
-                         </div>
+                          {r.score != null ? (
+                            <div className="flex items-center gap-2">
+                              <span>Score: {r.score}</span>
+                              <div className="w-20 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full ${
+                                    r.score >= 70 ? 'bg-green-500' : r.score >= 40 ? 'bg-yellow-500' : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${Math.min(100, r.score)}%` }}
+                                />
+                              </div>
+                            </div>
+                          ) : "Sin calificar"} • {new Date(r.created_at).toLocaleString()}
+                        </div>
                        </div>
                      </div>
                    ))}

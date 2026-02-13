@@ -269,6 +269,34 @@ export async function DELETE(req: NextRequest) {
     
     const supabase = createSupabaseAdminClient();
     
+    // 1. Obtener información del curso antes de borrarlo para limpieza posterior
+    const { data: curso } = await supabase
+      .from("cursos")
+      .select("titulo")
+      .eq("id", id)
+      .single();
+
+    const titulo = curso?.titulo;
+
+    // 2. Limpieza de tablas relacionadas que no tienen CASCADE o usan título
+    if (titulo) {
+      await supabase.from("evaluaciones").delete().eq("course_name", titulo);
+    }
+    await supabase.from("cursos_alumnos").delete().eq("curso_id", id);
+    await supabase.from("intereses").delete().eq("course_id", id);
+    
+    // 3. Limpieza de archivos en storage (opcional/deseable)
+    try {
+      const { data: files } = await supabase.storage.from("materiales").list(id);
+      if (files && files.length > 0) {
+        const paths = files.map(f => `${id}/${f.name}`);
+        await supabase.storage.from("materiales").remove(paths);
+      }
+    } catch (err) {
+      console.error("Error cleaning storage:", err);
+    }
+
+    // 4. Borrar el curso
     const { error } = await supabase
       .from("cursos")
       .delete()

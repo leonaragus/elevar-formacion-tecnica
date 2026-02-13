@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 export async function GET(request: Request) {
   try {
     const authHeader = request.headers.get('Authorization');
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const token = authHeader?.replace('Bearer ', '') || cookieStore.get('sb-access-token')?.value;
 
     if (!token) {

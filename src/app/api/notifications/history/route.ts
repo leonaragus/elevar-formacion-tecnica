@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 export async function GET(request: Request) {
   try {
     const authHeader = request.headers.get('Authorization');
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const token = authHeader?.replace('Bearer ', '') || cookieStore.get('sb-access-token')?.value;
 
     const supabase = createClient(
@@ -42,7 +42,7 @@ export async function GET(request: Request) {
         title,
         body,
         curso_id,
-        cursos!notification_history_curso_id_fkey(titulo),
+        cursos:notification_history_curso_id_fkey(titulo),
         created_at,
         user_id,
         read
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
     }
 
     // Transform the data to match the frontend interface
-    const transformedHistory = history.map(item => ({
+    const transformedHistory = (history || []).map((item: any) => ({
       id: item.id,
       title: item.title,
       body: item.body,

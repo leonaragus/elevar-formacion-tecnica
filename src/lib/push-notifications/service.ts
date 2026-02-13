@@ -118,7 +118,7 @@ class PushNotificationService {
       // Subscribe to push notifications with a timeout
       const subscribePromise = this.swRegistration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: applicationServerKey
+        applicationServerKey: applicationServerKey as any
       });
 
       const timeoutPromise = new Promise((_, reject) => 

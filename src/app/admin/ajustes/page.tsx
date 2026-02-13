@@ -70,10 +70,6 @@ export default async function AjustesAdminPage() {
               <DollarSign className="w-4 h-4 mr-2" />
               Pagos
             </a>
-            <a href="/admin/legajos" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
-              <Users className="w-4 h-4 mr-2" />
-              Legajos
-            </a>
             <a href="/admin/cursos" className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-slate-50">
               <Database className="w-4 h-4 mr-2" />
               Cursos

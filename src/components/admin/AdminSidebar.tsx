@@ -58,12 +58,6 @@ const menuItems = [
     description: "Exámenes y notas"
   },
   {
-    name: "Legajos",
-    href: "/admin/legajos",
-    icon: Users,
-    description: "Alumnos y perfiles"
-  },
-  {
     name: "Pagos",
     href: "/admin/pagos",
     icon: DollarSign,

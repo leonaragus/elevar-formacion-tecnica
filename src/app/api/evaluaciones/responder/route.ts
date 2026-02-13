@@ -77,9 +77,21 @@ async function isEvaluacionInCourseTitle(evaluacionId: string, courseTitle: stri
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { evaluacionId, userId, answers, score } = body || {};
+  let { evaluacionId, userId, answers, score } = body || {};
   if (!evaluacionId || !Array.isArray(answers)) {
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
+  }
+
+  const supabase = await createSupabaseServerClient();
+
+  // Intentar obtener el ID de usuario de la sesión si no viene en el body
+  if (!userId) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) userId = user.id;
+    } catch (e) {
+      console.error("Error obteniendo usuario en responder:", e);
+    }
   }
 
   const teacher = isAuthorized(req);
