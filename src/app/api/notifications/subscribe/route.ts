@@ -30,16 +30,39 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user is enrolled in the course
-    // Si el user.id es un email (cookie_only), usamos eso para buscar
+    // IMPORTANTE: La tabla cursos_alumnos NO tiene columna 'email'
     console.log('Verificando inscripción para:', { userId: user.id, email: user.email, cursoId: curso_id });
     
-    const { data: enrollment, error: enrollmentError } = await supabase
+    // Primero intentamos por user_id
+    let enrollmentQuery = supabase
       .from('cursos_alumnos')
-      .select('id, user_id, email, estado')
+      .select('id, user_id, estado')
       .eq('curso_id', curso_id)
-      .or(`user_id.eq."${user.id}",email.eq."${user.email}"`)
-      .eq('estado', 'activo')
-      .maybeSingle();
+      .eq('estado', 'activo');
+
+    // Si tenemos un user_id real (no es el email del fallback), filtramos por él
+    if (user.id && !user.id.includes('@')) {
+      enrollmentQuery = enrollmentQuery.eq('user_id', user.id);
+    } else {
+      // Si el user_id es el email (fallback de getApiUser), buscamos el perfil primero
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', user.email)
+        .maybeSingle();
+      
+      if (profile) {
+        enrollmentQuery = enrollmentQuery.eq('user_id', profile.id);
+      } else {
+        // Si no hay perfil, este usuario no puede estar inscrito
+        return NextResponse.json(
+          { error: 'Usuario no encontrado' },
+          { status: 403 }
+        );
+      }
+    }
+
+    const { data: enrollment, error: enrollmentError } = await enrollmentQuery.maybeSingle();
 
     if (enrollmentError || !enrollment) {
       console.error('Error de inscripción o no encontrado:', enrollmentError, enrollment);
