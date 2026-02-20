@@ -176,7 +176,7 @@ async function enviarNotificacionAlumno(alumnoId: string, entrega: Entrega, reco
     }
 
     // Enviar notificación push
-    const resultado = await sendPushNotification({
+    const resultado = await sendNotificationToUser(supabase, {
       userEmail: perfil.email,
       cursoId: entrega.curso_id,
       title: titulo,
