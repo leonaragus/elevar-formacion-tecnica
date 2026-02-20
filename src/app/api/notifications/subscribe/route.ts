@@ -29,6 +29,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let resolvedUserId = user.id;
+
     // Check if user is enrolled in the course
     // IMPORTANTE: La tabla cursos_alumnos NO tiene columna 'email'
     console.log('Verificando inscripción para:', { userId: user.id, email: user.email, cursoId: curso_id });
@@ -52,6 +54,7 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
       
       if (profile) {
+        resolvedUserId = profile.id;
         enrollmentQuery = enrollmentQuery.eq('user_id', profile.id);
       } else {
         // Si no hay perfil, este usuario no puede estar inscrito
@@ -76,7 +79,7 @@ export async function POST(request: NextRequest) {
     const { data: existingSubscription } = await supabase
       .from('push_subscriptions')
       .select('id')
-      .eq('user_id', user.id)
+      .eq('user_id', resolvedUserId)
       .eq('curso_id', curso_id)
       .maybeSingle();
 
@@ -86,8 +89,8 @@ export async function POST(request: NextRequest) {
         .from('push_subscriptions')
         .update({
           endpoint: subscription.endpoint,
-          p256dh: subscription.keys.p256dh,
-          auth: subscription.keys.auth,
+          p256dh: subscription.keys?.p256dh || '',
+          auth: subscription.keys?.auth || '',
           updated_at: new Date().toISOString()
         })
         .eq('id', existingSubscription.id);
@@ -106,12 +109,12 @@ export async function POST(request: NextRequest) {
       const { error } = await supabase
         .from('push_subscriptions')
         .insert({
-          user_id: user.id,
+          user_id: resolvedUserId,
           user_email: user.email,
           curso_id: curso_id,
           endpoint: subscription.endpoint,
-          p256dh: subscription.keys.p256dh,
-          auth: subscription.keys.auth
+          p256dh: subscription.keys?.p256dh || '',
+          auth: subscription.keys?.auth || ''
         });
 
       if (error) {

@@ -9,6 +9,7 @@ type Comment = {
   author_email?: string | null;
   texto: string;
   created_at: string;
+  calificacion_estrellas?: number | null;
 };
 
 export default function CommentsSection({ claseId }: { claseId: string }) {
@@ -68,50 +69,80 @@ export default function CommentsSection({ claseId }: { claseId: string }) {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6 mt-8">
-      <h2 className="text-xl font-semibold text-gray-900 mb-4">💬 Comentarios</h2>
-      <div className="mb-4">
+    <div className="bg-white rounded-xl shadow-lg p-6 mt-8 border border-gray-100">
+      <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+        💬 Comentarios de la Clase
+      </h2>
+      <div className="mb-8 bg-gray-50 p-5 rounded-xl border border-gray-200 shadow-inner">
         <textarea
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
-          className="w-full border border-gray-300 rounded-md p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full border border-gray-300 rounded-lg p-4 text-base focus:outline-none focus:ring-3 focus:ring-blue-400 focus:border-blue-400 transition-all duration-200 ease-in-out resize-y min-h-[100px]"
           rows={4}
-          placeholder="Deje su comentario o qué le pareció la clase"
+          placeholder="¡Deja tu comentario o pregunta! 🤔 ¿Qué te pareció la clase?"
           disabled={loading}
+          maxLength={500}
         />
-        <div className="mt-3 flex justify-end">
+        <div className="mt-4 flex justify-between items-center">
+          <span className="text-sm text-gray-500">
+            {texto.length}/500 caracteres
+          </span>
           <button
             onClick={submit}
             disabled={loading || !texto.trim()}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
+            className="inline-flex items-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-base font-medium text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 focus:outline-none focus:ring-3 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 ease-in-out"
           >
-            Enviar
+            {loading ? 'Enviando...' : '🚀 Enviar Comentario'}
           </button>
         </div>
-        {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+        {error && <p className="text-sm text-red-600 mt-3 font-medium">⚠️ Error: {error}</p>}
       </div>
 
       {loading ? (
-        <p className="text-sm text-gray-600">Cargando comentarios...</p>
+        <p className="text-sm text-gray-600 text-center py-4">Cargando comentarios...</p>
       ) : comments.length === 0 ? (
-        <p className="text-sm text-gray-600">Aún no hay comentarios.</p>
+        <p className="text-md text-gray-600 text-center py-6 bg-gray-50 rounded-xl border border-gray-200">
+          Aún no hay comentarios en esta clase. ¡Sé el primero en comentar! 👋
+        </p>
       ) : (
-        <ul className="space-y-4">
+        <ul className="space-y-5">
           {comments.map((c) => (
-            <li key={c.id} className="border border-gray-200 rounded-md p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-900">
-                  {c.author_email
-                    ? c.author_email
-                    : c.author_id
-                    ? "Usuario"
-                    : "Anónimo"}
-                </span>
-                <span className="text-xs text-gray-500">
-                  {new Date(c.created_at).toLocaleString("es-ES")}
-                </span>
+            <li key={c.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow duration-200 ease-in-out">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-blue-100 text-blue-700 text-md font-bold flex-shrink-0">
+                    {c.author_email ? c.author_email[0].toUpperCase() : '?'}{" "}
+                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-base font-semibold text-gray-800">
+                      {c.author_email
+                        ? c.author_email.split("@")[0]
+                        : c.author_id
+                        ? "Usuario Anónimo"
+                        : "Anónimo"}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {new Date(c.created_at).toLocaleString("es-ES", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                </div>
+                {c.calificacion_estrellas && (
+                  <div className="flex items-center text-yellow-400 text-lg">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <span key={star} className={`${star <= c.calificacion_estrellas! ? "opacity-100" : "opacity-30"}`}>
+                        ★
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-              <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">
+              <p className="text-gray-700 whitespace-pre-wrap leading-relaxed text-base">
                 {c.texto}
               </p>
             </li>
