@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     const supabase = createSupabaseAdminClient();
     const { data, error } = await supabase
       .from("clases_comentarios")
-      .select("id, clase_id, author_id, author_email, texto, created_at, calificacion_estrellas")
+      .select("id, clase_id, author_id, author_email, texto, created_at")
       .eq("clase_id", claseId)
       .order("created_at", { ascending: false })
       .limit(100);
@@ -33,7 +33,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const claseId = String(body?.clase_id || "").trim();
     const texto = String(body?.texto || "").trim();
-    const calificacionEstrellas = Number(body?.calificacion_estrellas || 0);
     if (!claseId || !texto) {
       return NextResponse.json({ ok: false, error: "Datos inválidos" }, { status: 400 });
     }
@@ -52,7 +51,6 @@ export async function POST(req: NextRequest) {
       texto,
       author_id: authorId,
       author_email: authorEmail,
-      calificacion_estrellas: calificacionEstrellas,
     };
     const { error } = await admin.from("clases_comentarios").insert(insert).select("id").single();
     if (error) {
