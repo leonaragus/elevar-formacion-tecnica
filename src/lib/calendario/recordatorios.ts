@@ -1,6 +1,6 @@
 // Servicio de notificaciones automáticas para calendario de entregas
 import { createClient } from '@supabase/supabase-js';
-import { sendPushNotification } from '@/lib/push-notifications/service';
+import { sendNotificationToUser } from '@/lib/push-notifications/server';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
