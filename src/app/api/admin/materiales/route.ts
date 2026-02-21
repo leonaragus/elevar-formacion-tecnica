@@ -223,39 +223,13 @@ export async function POST(req: NextRequest) {
           glossaryError = glossaryError || "pdf: no se pudo extraer texto (posible PDF escaneado)";
         }
 
-        const openaiKey = process.env.OPENAI_API_KEY;
-        const canUseOpenAI = typeof openaiKey === "string" && openaiKey.length > 20;
+        // Opción: OpenAI desactivado por solicitud del usuario (sin costos/restricciones)
+        // Se usa siempre el fallback de análisis de frecuencia
+        const canUseOpenAI = false; 
         let glossaryMd = "";
+
         if (textContent && textContent.trim().length > 0) {
-          if (!canUseOpenAI && !glossaryError) {
-            glossaryError = "openai: falta OPENAI_API_KEY (se generó glosario simple)";
-          }
-          if (canUseOpenAI) {
-            try {
-              const { OpenAI } = await import("openai");
-              const client = new OpenAI({ apiKey: openaiKey });
-              const prompt = `Genera un glosario breve y claro a partir del siguiente material.\n- Lista 15-25 términos clave (en español).\n- Para cada término: título del término y una definición de 1-2 oraciones, simple y apta para alumnos.\n- No inventes contenido ajeno al texto; si no hay suficiente contexto, indica "(definición general)".\n- Formato: Markdown, encabezado H1 con "Glosario" y luego subtítulos H3 por término.\n\nTexto:\n\n${textContent.slice(0, 12000)}`;
-
-              const completion = await client.chat.completions.create({
-                model: "gpt-4o-mini",
-                messages: [
-                  {
-                    role: "system",
-                    content: "Eres un experto en pedagogía que genera glosarios educativos claros y precisos.",
-                  },
-                  { role: "user", content: prompt },
-                ],
-                temperature: 0.4,
-              });
-
-              const out = completion.choices[0]?.message?.content || "";
-              glossaryMd = out.trim();
-            } catch (e) {
-              glossaryError = `openai: ${(e as any)?.message || "error"}`;
-              console.error("OpenAI error:", e);
-            }
-          }
-
+           // Fallback directo
           if (!glossaryMd) {
             const words = textContent
               .toLowerCase()

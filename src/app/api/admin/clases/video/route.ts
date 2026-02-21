@@ -79,31 +79,55 @@ export async function POST(request: NextRequest) {
     let publicUrl = '';
     let videoPathParte2 = '';
     let publicUrlParte2 = '';
+    let videoPathParte3 = '';
+    let publicUrlParte3 = '';
+    let videoPathParte4 = '';
+    let publicUrlParte4 = '';
     let esMultipart = false;
     let totalPartes = 1;
     if (fileBuffer.byteLength > MAX_PART) {
-      if (fileBuffer.byteLength > MAX_PART * 2) {
+      if (fileBuffer.byteLength > MAX_PART * 4) {
         fs.unlinkSync(tmpPath);
         return NextResponse.json({ 
-          error: 'El archivo supera el límite permitido para dividir en 2 partes (≈90MB). Comprimí el video o subilo en menor calidad.' 
+          error: 'El archivo supera el límite permitido para dividir en 4 partes (≈180MB). Comprimí el video o subilo en menor calidad.' 
         }, { status: 413 });
       }
       esMultipart = true;
-      totalPartes = 2;
+      totalPartes = Math.ceil(fileBuffer.byteLength / MAX_PART);
+      
       const parte1 = fileBuffer.subarray(0, MAX_PART);
-      const parte2 = fileBuffer.subarray(MAX_PART);
       const part1Path = `cursos/${cursoId}/videos/${baseName}.part1`;
-      const part2Path = `cursos/${cursoId}/videos/${baseName}.part2`;
       const { error: upErr1 } = await supabase.storage.from(bucket).upload(part1Path, parte1, { contentType: mimeType });
       if (upErr1) throw upErr1;
-      const { error: upErr2 } = await supabase.storage.from(bucket).upload(part2Path, parte2, { contentType: mimeType });
-      if (upErr2) throw upErr2;
-      const pub1 = supabase.storage.from(bucket).getPublicUrl(part1Path).data.publicUrl;
-      const pub2 = supabase.storage.from(bucket).getPublicUrl(part2Path).data.publicUrl;
       videoPath = part1Path;
-      publicUrl = pub1;
-      videoPathParte2 = part2Path;
-      publicUrlParte2 = pub2;
+      publicUrl = supabase.storage.from(bucket).getPublicUrl(part1Path).data.publicUrl;
+
+      if (totalPartes >= 2) {
+        const parte2 = fileBuffer.subarray(MAX_PART, MAX_PART * 2);
+        const part2Path = `cursos/${cursoId}/videos/${baseName}.part2`;
+        const { error: upErr2 } = await supabase.storage.from(bucket).upload(part2Path, parte2, { contentType: mimeType });
+        if (upErr2) throw upErr2;
+        videoPathParte2 = part2Path;
+        publicUrlParte2 = supabase.storage.from(bucket).getPublicUrl(part2Path).data.publicUrl;
+      }
+
+      if (totalPartes >= 3) {
+        const parte3 = fileBuffer.subarray(MAX_PART * 2, MAX_PART * 3);
+        const part3Path = `cursos/${cursoId}/videos/${baseName}.part3`;
+        const { error: upErr3 } = await supabase.storage.from(bucket).upload(part3Path, parte3, { contentType: mimeType });
+        if (upErr3) throw upErr3;
+        videoPathParte3 = part3Path;
+        publicUrlParte3 = supabase.storage.from(bucket).getPublicUrl(part3Path).data.publicUrl;
+      }
+
+      if (totalPartes >= 4) {
+        const parte4 = fileBuffer.subarray(MAX_PART * 3, MAX_PART * 4);
+        const part4Path = `cursos/${cursoId}/videos/${baseName}.part4`;
+        const { error: upErr4 } = await supabase.storage.from(bucket).upload(part4Path, parte4, { contentType: mimeType });
+        if (upErr4) throw upErr4;
+        videoPathParte4 = part4Path;
+        publicUrlParte4 = supabase.storage.from(bucket).getPublicUrl(part4Path).data.publicUrl;
+      }
     } else {
       const { error: uploadError } = await supabase.storage
         .from(bucket)
@@ -130,6 +154,10 @@ export async function POST(request: NextRequest) {
         video_public_url: publicUrl,
         video_path_parte2: videoPathParte2 || null,
         video_public_url_parte2: publicUrlParte2 || null,
+        video_path_parte3: videoPathParte3 || null,
+        video_public_url_parte3: publicUrlParte3 || null,
+        video_path_parte4: videoPathParte4 || null,
+        video_public_url_parte4: publicUrlParte4 || null,
         es_multipart: esMultipart,
         total_partes: totalPartes,
         archivo_original_nombre: fileName,
@@ -217,31 +245,58 @@ export async function POST(request: NextRequest) {
     let publicUrl = '';
     let videoPathParte2 = '';
     let publicUrlParte2 = '';
+    let videoPathParte3 = '';
+    let publicUrlParte3 = '';
+    let videoPathParte4 = '';
+    let publicUrlParte4 = '';
     let esMultipart = false;
     let totalPartes = 1;
     if ((videoFile.size || 0) > MAX_PART) {
-      if ((videoFile.size || 0) > MAX_PART * 2) {
+      if ((videoFile.size || 0) > MAX_PART * 4) {
         return NextResponse.json({ 
-          error: 'El archivo supera el límite permitido para dividir en 2 partes (≈90MB). Comprimí el video o subilo en menor calidad.' 
+          error: 'El archivo supera el límite permitido para dividir en 4 partes (≈180MB). Comprimí el video o subilo en menor calidad.' 
         }, { status: 413 });
       }
       esMultipart = true;
-      totalPartes = 2;
+      totalPartes = Math.ceil((videoFile.size || 0) / MAX_PART);
+      
       const ab = await videoFile.arrayBuffer();
       const buf = Buffer.from(ab);
-      const parte1 = buf.subarray(0, MAX_PART);
-      const parte2 = buf.subarray(MAX_PART);
-      const part1Path = `cursos/${cursoId}/videos/${baseName}.part1`;
-      const part2Path = `cursos/${cursoId}/videos/${baseName}.part2`;
       const mimeType = videoFile.type || 'video/mp4';
+      
+      const parte1 = buf.subarray(0, MAX_PART);
+      const part1Path = `cursos/${cursoId}/videos/${baseName}.part1`;
       const { error: upErr1 } = await supabase.storage.from(bucket).upload(part1Path, parte1, { contentType: mimeType });
       if (upErr1) throw upErr1;
-      const { error: upErr2 } = await supabase.storage.from(bucket).upload(part2Path, parte2, { contentType: mimeType });
-      if (upErr2) throw upErr2;
       videoPath = part1Path;
       publicUrl = supabase.storage.from(bucket).getPublicUrl(part1Path).data.publicUrl;
-      videoPathParte2 = part2Path;
-      publicUrlParte2 = supabase.storage.from(bucket).getPublicUrl(part2Path).data.publicUrl;
+
+      if (totalPartes >= 2) {
+        const parte2 = buf.subarray(MAX_PART, MAX_PART * 2);
+        const part2Path = `cursos/${cursoId}/videos/${baseName}.part2`;
+        const { error: upErr2 } = await supabase.storage.from(bucket).upload(part2Path, parte2, { contentType: mimeType });
+        if (upErr2) throw upErr2;
+        videoPathParte2 = part2Path;
+        publicUrlParte2 = supabase.storage.from(bucket).getPublicUrl(part2Path).data.publicUrl;
+      }
+
+      if (totalPartes >= 3) {
+        const parte3 = buf.subarray(MAX_PART * 2, MAX_PART * 3);
+        const part3Path = `cursos/${cursoId}/videos/${baseName}.part3`;
+        const { error: upErr3 } = await supabase.storage.from(bucket).upload(part3Path, parte3, { contentType: mimeType });
+        if (upErr3) throw upErr3;
+        videoPathParte3 = part3Path;
+        publicUrlParte3 = supabase.storage.from(bucket).getPublicUrl(part3Path).data.publicUrl;
+      }
+
+      if (totalPartes >= 4) {
+        const parte4 = buf.subarray(MAX_PART * 3, MAX_PART * 4);
+        const part4Path = `cursos/${cursoId}/videos/${baseName}.part4`;
+        const { error: upErr4 } = await supabase.storage.from(bucket).upload(part4Path, parte4, { contentType: mimeType });
+        if (upErr4) throw upErr4;
+        videoPathParte4 = part4Path;
+        publicUrlParte4 = supabase.storage.from(bucket).getPublicUrl(part4Path).data.publicUrl;
+      }
     } else {
       const { error: uploadError } = await supabase.storage
         .from(bucket)
@@ -268,6 +323,10 @@ export async function POST(request: NextRequest) {
         video_public_url: publicUrl,
         video_path_parte2: videoPathParte2 || null,
         video_public_url_parte2: publicUrlParte2 || null,
+        video_path_parte3: videoPathParte3 || null,
+        video_public_url_parte3: publicUrlParte3 || null,
+        video_path_parte4: videoPathParte4 || null,
+        video_public_url_parte4: publicUrlParte4 || null,
         es_multipart: esMultipart,
         total_partes: totalPartes,
         archivo_original_nombre: fileName || videoFile.name,

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 // Configure web-push with error handling
 function initializeWebPush() {
   try {

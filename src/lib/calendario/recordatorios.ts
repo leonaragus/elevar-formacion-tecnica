@@ -1,11 +1,14 @@
-// Servicio de notificaciones automáticas para calendario de entregas
 import { createClient } from '@supabase/supabase-js';
-import { sendNotificationToUser } from '@/lib/push-notifications/server';
+import { sendPushNotification } from '@/lib/push-notifications/service';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE;
+  if (!url || !key) {
+    throw new Error('Faltan variables de entorno de Supabase para recordatorios (URL o SERVICE_ROLE_KEY)');
+  }
+  return createClient(url, key);
+}
 
 interface Recordatorio {
   id: string;
@@ -27,6 +30,7 @@ interface Entrega {
 export async function enviarRecordatoriosCalendario() {
   try {
     console.log('Iniciando envío de recordatorios de calendario...');
+    const supabase = getAdminClient();
 
     // Obtener recordatorios pendientes de enviar
     const { data: recordatorios, error: recordatoriosError } = await supabase
@@ -63,6 +67,7 @@ export async function enviarRecordatoriosCalendario() {
 
 async function procesarRecordatorio(recordatorio: Recordatorio) {
   try {
+    const supabase = getAdminClient();
     // Obtener la información de la entrega
     const { data: entrega, error: entregaError } = await supabase
       .from('calendario_entregas')
@@ -116,6 +121,7 @@ async function procesarRecordatorio(recordatorio: Recordatorio) {
 
 async function enviarNotificacionAlumno(alumnoId: string, entrega: Entrega, recordatorio: Recordatorio) {
   try {
+    const supabase = getAdminClient();
     // Verificar que el alumno no haya entregado ya
     const { data: entregaAlumno, error: entregaAlumnoError } = await supabase
       .from('entregas_alumnos')
@@ -176,7 +182,7 @@ async function enviarNotificacionAlumno(alumnoId: string, entrega: Entrega, reco
     }
 
     // Enviar notificación push
-    const resultado = await sendNotificationToUser(supabase, {
+    const resultado = await sendPushNotification({
       userEmail: perfil.email,
       cursoId: entrega.curso_id,
       title: titulo,
@@ -221,6 +227,7 @@ async function enviarNotificacionAlumno(alumnoId: string, entrega: Entrega, reco
 
 async function marcarRecordatorioEnviado(recordatorioId: string) {
   try {
+    const supabase = getAdminClient();
     const { error } = await supabase
       .from('recordatorios_entregas')
       .update({ 

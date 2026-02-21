@@ -71,6 +71,8 @@ export default async function VerClaseAlumnoPage({ params }: PageProps) {
           <VideoPlayer
             videoUrl={clase.video_public_url}
             videoUrlParte2={clase.video_public_url_parte2}
+            videoUrlParte3={clase.video_public_url_parte3}
+            videoUrlParte4={clase.video_public_url_parte4}
             titulo={clase.titulo}
             transcripcionTexto={clase.transcripcion_texto}
             transcripcionSrt={clase.transcripcion_srt}

@@ -165,15 +165,20 @@ export async function ensureGlossaryForMaterialKey(input: {
   let glossaryError: string | null = null;
 
   const textContent = await extractPdfText(buffer);
-  if (textContent.trim().length > 0) {
-    const ai = await buildOpenAIGlossary(textContent);
-    glossaryMd = ai.glossaryMd;
-    glossaryError = ai.glossaryError;
-    if (!glossaryMd) glossaryMd = buildFallbackGlossary(textContent);
+ if (textContent.trim().length > 0) {
+    // OpenAI deshabilitado por configuración regional/costos
+    // const ai = await buildOpenAIGlossary(textContent);
+    // glossaryMd = ai.glossaryMd;
+    // glossaryError = ai.glossaryError;
+    
+    // Fallback directo
+    if (!glossaryMd) {
+      glossaryMd = buildFallbackGlossary(textContent);
+    }
   } else {
     glossaryError = "pdf: no se pudo extraer texto (posible PDF escaneado)";
-    const openaiKey = process.env.OPENAI_API_KEY;
-    const canUseOpenAI = typeof openaiKey === "string" && openaiKey.length > 20;
+    // OpenAI deshabilitado
+    const canUseOpenAI = false; // typeof openaiKey === "string" && openaiKey.length > 20;
     if (canUseOpenAI) {
       try {
         const pages = await renderPdfToPngPages(buffer, { maxPages: 2, scale: 1.4 });

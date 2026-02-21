@@ -174,15 +174,18 @@ export async function ensureGlossaryForMaterial(input: EnsureGlossaryInput) {
   let glossaryError: string | null = null;
 
   if (textContent.trim().length > 0) {
-    const ai = await buildOpenAIGlossary(textContent);
-    glossaryMd = ai.glossaryMd;
-    glossaryError = ai.glossaryError;
+    // OpenAI deshabilitado
+    // const ai = await buildOpenAIGlossary(textContent);
+    // glossaryMd = ai.glossaryMd;
+    // glossaryError = ai.glossaryError;
+    
     if (!glossaryMd) {
       glossaryMd = buildFallbackGlossary(textContent);
     }
   } else {
     const openaiKey = process.env.OPENAI_API_KEY;
-    const canUseOpenAI = typeof openaiKey === "string" && openaiKey.length > 20;
+    // OpenAI deshabilitado
+    const canUseOpenAI = false; // typeof openaiKey === "string" && openaiKey.length > 20;
     if (canUseOpenAI) {
       try {
         const pages = await renderPdfToPngPages(buffer, { maxPages: 2, scale: 1.4 });

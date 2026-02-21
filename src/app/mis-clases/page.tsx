@@ -243,6 +243,8 @@ export default async function MisClasesPage(props: PageProps) {
                   <VideoPlayer
                     videoUrl={claseSeleccionada.video_public_url}
                     videoUrlParte2={claseSeleccionada.video_public_url_parte2}
+                    videoUrlParte3={claseSeleccionada.video_public_url_parte3}
+                    videoUrlParte4={claseSeleccionada.video_public_url_parte4}
                     titulo={claseSeleccionada.titulo}
                     transcripcionTexto={claseSeleccionada.transcripcion_texto}
                     transcripcionSrt={claseSeleccionada.transcripcion_srt}

@@ -31,8 +31,12 @@ async function resolvePublicUrls(
   }
   let url1 = clase?.video_public_url || '';
   let url2 = clase?.video_public_url_parte2 || '';
+  let url3 = clase?.video_public_url_parte3 || '';
+  let url4 = clase?.video_public_url_parte4 || '';
   const videoPath = String(clase?.video_path || '');
   const videoPath2 = String(clase?.video_path_parte2 || '');
+  const videoPath3 = String(clase?.video_path_parte3 || '');
+  const videoPath4 = String(clase?.video_path_parte4 || '');
   if (!(await urlOk(url1)) && videoPath) {
     for (const b of bucketPriority) {
       const { data } = supabase.storage.from(b).getPublicUrl(videoPath);
@@ -51,7 +55,25 @@ async function resolvePublicUrls(
       }
     }
   }
-  return { url1, url2 };
+  if (!(await urlOk(url3)) && videoPath3) {
+    for (const b of bucketPriority) {
+      const { data } = supabase.storage.from(b).getPublicUrl(videoPath3);
+      if (await urlOk(data.publicUrl)) {
+        url3 = data.publicUrl;
+        break;
+      }
+    }
+  }
+  if (!(await urlOk(url4)) && videoPath4) {
+    for (const b of bucketPriority) {
+      const { data } = supabase.storage.from(b).getPublicUrl(videoPath4);
+      if (await urlOk(data.publicUrl)) {
+        url4 = data.publicUrl;
+        break;
+      }
+    }
+  }
+  return { url1, url2, url3, url4 };
 }
 
 export default async function VerClasePage({ params, searchParams }: PageProps) {
@@ -119,6 +141,8 @@ export default async function VerClasePage({ params, searchParams }: PageProps) 
               <VideoPlayer
                 videoUrl={urls.url1 || clase.video_public_url}
                 videoUrlParte2={urls.url2 || clase.video_public_url_parte2}
+                videoUrlParte3={urls.url3 || clase.video_public_url_parte3}
+                videoUrlParte4={urls.url4 || clase.video_public_url_parte4}
                 titulo={clase.titulo}
                 transcripcionTexto={clase.transcripcion_texto}
                 transcripcionSrt={clase.transcripcion_srt}
@@ -196,6 +220,8 @@ export default async function VerClasePage({ params, searchParams }: PageProps) 
               <VideoPlayer
                 videoUrl={urls.url1 || cg.video_public_url}
                 videoUrlParte2={urls.url2 || cg.video_public_url_parte2}
+                videoUrlParte3={urls.url3 || cg.video_public_url_parte3}
+                videoUrlParte4={urls.url4 || cg.video_public_url_parte4}
                 titulo={cg.titulo}
                 transcripcionTexto={cg.transcripcion_texto}
                 transcripcionSrt={cg.transcripcion_srt}

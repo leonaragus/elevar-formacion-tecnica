@@ -58,6 +58,8 @@ function parsearTexto(texto: string): TranscripcionItem[] {
 interface VideoPlayerProps {
   videoUrl: string;
   videoUrlParte2?: string; // URL opcional para la segunda parte
+  videoUrlParte3?: string; // URL opcional para la tercera parte
+  videoUrlParte4?: string; // URL opcional para la cuarta parte
   titulo: string;
   transcripcionTexto?: string;
   transcripcionSrt?: string;
@@ -66,6 +68,8 @@ interface VideoPlayerProps {
 export default function VideoPlayer({ 
   videoUrl, 
   videoUrlParte2, 
+  videoUrlParte3, 
+  videoUrlParte4,
   titulo, 
   transcripcionTexto, 
   transcripcionSrt 
@@ -94,17 +98,20 @@ export default function VideoPlayer({
   const [busqueda, setBusqueda] = useState('');
   const [mostrarTranscripcion, setMostrarTranscripcion] = useState(true);
   const [videoBlobUrl, setVideoBlobUrl] = useState<string>(videoUrl);
-  const esMultipart = !!videoUrlParte2;
+  
+  // Calcular número de partes
+  const partes = [videoUrl, videoUrlParte2, videoUrlParte3, videoUrlParte4].filter(Boolean).length;
+  const esMultipart = partes > 1;
 
-  // Unir las dos partes del video si existe la segunda parte
+  // Unir las partes del video si existen múltiples
   useEffect(() => {
-    if (!videoUrlParte2) return;
-    Promise.all([
-      fetch(videoUrl).then(r => r.blob()),
-      fetch(videoUrlParte2).then(r => r.blob())
-    ])
-    .then(([blob1, blob2]) => {
-      const blob = new Blob([blob1, blob2], { type: 'video/mp4' });
+    if (!esMultipart) return;
+
+    const urls = [videoUrl, videoUrlParte2, videoUrlParte3, videoUrlParte4].filter(Boolean) as string[];
+    
+    Promise.all(urls.map(url => fetch(url).then(r => r.blob())))
+    .then((blobs) => {
+      const blob = new Blob(blobs, { type: 'video/mp4' });
       const url = URL.createObjectURL(blob);
       setVideoBlobUrl(url);
     })
@@ -112,7 +119,7 @@ export default function VideoPlayer({
       console.error('Error al unir partes:', err);
       setVideoBlobUrl(videoUrl); // Fallback a la primera parte
     });
-  }, [videoUrl, videoUrlParte2]);
+  }, [videoUrl, videoUrlParte2, videoUrlParte3, videoUrlParte4, esMultipart]);
 
   // Actualizar tiempo actual del video
   useEffect(() => {
@@ -164,19 +171,13 @@ export default function VideoPlayer({
   // Función para descargar el video
   const descargarVideo = async () => {
     try {
-      if (videoUrlParte2) {
-        // Si hay dos partes, unirlas antes de descargar
-        const [response1, response2] = await Promise.all([
-          fetch(videoUrl),
-          fetch(videoUrlParte2)
-        ]);
+      if (esMultipart) {
+        // Si hay varias partes, unirlas antes de descargar
+        const urls = [videoUrl, videoUrlParte2, videoUrlParte3, videoUrlParte4].filter(Boolean) as string[];
+        const responses = await Promise.all(urls.map(url => fetch(url)));
+        const blobs = await Promise.all(responses.map(r => r.blob()));
         
-        const [blob1, blob2] = await Promise.all([
-          response1.blob(),
-          response2.blob()
-        ]);
-        
-        const blob = new Blob([blob1, blob2], { type: 'video/mp4' });
+        const blob = new Blob(blobs, { type: 'video/mp4' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -221,7 +222,7 @@ export default function VideoPlayer({
             {/* Indicador de multipart */}
             {esMultipart && (
               <div className="absolute top-2 right-2 bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs">
-                2 partes
+                {partes} partes
               </div>
             )}
           </div>
@@ -232,7 +233,7 @@ export default function VideoPlayer({
               {formatearTiempo(tiempoActual)} / {videoDuracion ? formatearTiempo(videoDuracion) : '--:--'}
               {esMultipart && (
                 <span className="ml-2 bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
-                  2 partes
+                  {partes} partes
                 </span>
               )}
             </span>

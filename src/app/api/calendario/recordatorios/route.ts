@@ -1,5 +1,7 @@
-import { enviarRecordatoriosCalendario } from '@/lib/calendario/recordatorios';
 import { NextResponse } from 'next/server';
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // POST /api/calendario/recordatorios - Ejecutar envío de recordatorios
 export async function POST(request: Request) {
@@ -12,6 +14,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
+    const { enviarRecordatoriosCalendario } = await import('@/lib/calendario/recordatorios');
     const resultado = await enviarRecordatoriosCalendario();
     
     if (resultado.error) {
