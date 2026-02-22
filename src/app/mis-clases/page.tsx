@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceRoleClient } from '@/lib/supabase/service-role';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
+import FloatingFeedbackButton from '@/components/FloatingFeedbackButton';
 import CommentsCourseSummary from '@/components/CommentsCourseSummary';
 import { cookies } from 'next/headers';
 import VideoPlayer from '@/components/VideoPlayer';
@@ -35,6 +36,20 @@ async function resolvePublicUrls(
 
   async function getWorkingUrl(path: string) {
     if (!path) return null;
+
+    // Prioritize signed URLs for known private buckets
+    // This avoids issues where public URL HEAD check fails but signed URL works
+    const privateBuckets = ['videos', 'clases-grabadas']; 
+    for (const b of privateBuckets) {
+       try {
+        const { data: signedData } = await supabase.storage.from(b).createSignedUrl(path, 60 * 60 * 24);
+        if (signedData?.signedUrl) {
+            // Optimistically return signed URL if it looks valid, verifying with HEAD
+            if (await urlOk(signedData.signedUrl)) return signedData.signedUrl;
+        }
+      } catch {}
+    }
+
     for (const b of bucketPriority) {
       // 1. Try public URL
       const { data: publicData } = supabase.storage.from(b).getPublicUrl(path);
@@ -257,6 +272,17 @@ export default async function MisClasesPage(props: PageProps) {
     .order('fecha_clase', { ascending: false });
 
   console.log('DEBUG: Clases encontradas:', clases?.length || 0, 'Error:', clasesError);
+  
+  if (!clases || clases.length === 0) {
+      console.log('DEBUG: No active classes found. Checking if there are inactive ones...');
+      const { data: inactive } = await adminSupabase
+        .from('clases_grabadas')
+        .select('id, titulo, activo')
+        .eq('curso_id', cursoId)
+        .limit(5);
+      console.log('DEBUG: Inactive classes found (might explain why user sees nothing):', inactive);
+  }
+
   if (clases && clases.length > 0) {
     console.log('DEBUG: Primera clase:', { id: clases[0].id, titulo: clases[0].titulo });
   }
@@ -348,10 +374,13 @@ export default async function MisClasesPage(props: PageProps) {
                   )}
                 </div>
 
-                {/* Sección de Comentarios */}
-                <div className="bg-white rounded-xl shadow-sm p-6">
+                {/* Sección de Comentarios (Legacy - se mantiene por compatibilidad visual, pero el botón flotante es el principal) */}
+                <div className="bg-white rounded-xl shadow-sm p-6 hidden md:block">
                   <CommentsCourseSummary cursoId={String(cursoId)} />
                 </div>
+                
+                {/* Botón Flotante de Feedback */}
+                <FloatingFeedbackButton cursoId={String(cursoId)} claseId={String(claseSeleccionada.id)} />
               </>
             ) : (
               <div className="bg-white rounded-xl shadow-sm p-12 text-center">

@@ -67,9 +67,10 @@ export async function POST(request: NextRequest) {
     const filePath = `cursos/${cursoId}/videos/${baseName}${partSuffix}`;
     
     step = 'createSignedUploadUrl';
+    // Expire in 1 hour (3600 seconds) to allow large uploads
     const { data, error } = await supabase.storage
       .from(bucket)
-      .createSignedUploadUrl(filePath);
+      .createSignedUploadUrl(filePath, { expiresIn: 3600 });
 
     if (error) {
       console.error('Error creating signed URL:', error);

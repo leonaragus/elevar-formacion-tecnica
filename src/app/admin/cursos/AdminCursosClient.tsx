@@ -318,14 +318,15 @@ import Link from "next/link";
       if (!confirm("¿Eliminar este curso?")) return;
       try {
           const res = await fetch(`/api/admin/cursos?id=${id}`, { method: "DELETE" });
-          if (res.ok) {
-              setCursos(prev => prev.filter(c => c.id !== id));
-          } else {
-              alert("Error al eliminar");
-          }
-      } catch {
-          alert("Error de red");
+      if (res.ok) {
+          setCursos(prev => prev.filter(c => c.id !== id));
+      } else {
+          const json = await res.json().catch(() => null);
+          alert(`Error al eliminar: ${json?.error || "Error desconocido"}`);
       }
+  } catch {
+      alert("Error de red");
+  }
    };
 
    const approvePending = async (user_id: string, curso_id: string) => {

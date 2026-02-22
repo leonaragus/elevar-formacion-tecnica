@@ -4,12 +4,12 @@ import { notFound } from 'next/navigation';
 import VideoPlayer from '@/components/VideoPlayer';
 
 interface PageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
-  searchParams?: {
+  }>;
+  searchParams: Promise<{
     curso?: string;
-  };
+  }>;
 }
 
 export const dynamic = 'force-dynamic';
@@ -79,9 +79,11 @@ async function resolvePublicUrls(
 }
 
 export default async function VerClasePage({ params, searchParams }: PageProps) {
+  const { id } = await params;
+  const { curso } = await searchParams;
   const supabase = createSupabaseAdminClient();
 
-  const cursoParam = String(searchParams?.curso || '').trim();
+  const cursoParam = String(curso || '').trim();
 
   // Si viene el curso en la URL, priorizar mostrar la última clase de ese curso
   if (cursoParam) {
@@ -135,7 +137,7 @@ export default async function VerClasePage({ params, searchParams }: PageProps) 
   const { data: clase, error } = await supabase
     .from('clases_grabadas')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   if (error || !clase) {

@@ -283,20 +283,72 @@ export async function DELETE(req: NextRequest) {
       await supabase.from("evaluaciones").delete().eq("course_name", titulo);
     }
     
+    // 2.5. Limpieza de Clases Grabadas y sus dependencias (comentarios, valoraciones, archivos)
+    // Intentamos buscar y borrar clases grabadas. Si la tabla requiere UUID y el ID es texto,
+    // capturamos el error 22P02 y continuamos (confiando en ON DELETE CASCADE o que no hay clases).
+    try {
+        const { data: clases, error: errClases } = await supabase
+        .from('clases_grabadas')
+        .select('id, video_path, video_path_parte2, video_path_parte3, video_path_parte4')
+        .eq('curso_id', id);
+
+        if (errClases) {
+            // Si es error de tipo UUID, lo ignoramos (significa que no hay coincidencia posible por tipo)
+            if (errClases.code !== '22P02' && !errClases.message?.includes('invalid input syntax')) {
+                console.error("Error fetching clases_grabadas:", errClases);
+            }
+        } else if (clases && clases.length > 0) {
+            const claseIds = clases.map(c => c.id);
+            
+            // Eliminar dependencias de clases
+            await supabase.from('clases_comentarios').delete().in('clase_id', claseIds);
+            await supabase.from('clases_valoraciones').delete().in('clase_id', claseIds);
+            
+            // Eliminar archivos de storage
+            const filesToDelete: string[] = [];
+            clases.forEach(c => {
+                if (c.video_path) filesToDelete.push(c.video_path);
+                if (c.video_path_parte2) filesToDelete.push(c.video_path_parte2);
+                if (c.video_path_parte3) filesToDelete.push(c.video_path_parte3);
+                if (c.video_path_parte4) filesToDelete.push(c.video_path_parte4);
+            });
+            
+            const validFiles = filesToDelete.filter(f => f && typeof f === 'string' && f.trim() !== '');
+            if (validFiles.length > 0) {
+                const buckets = ['videos', 'materiales', 'clases-grabadas'];
+                for (const b of buckets) {
+                    try {
+                        await supabase.storage.from(b).remove(validFiles);
+                    } catch {}
+                }
+            }
+            
+            // Eliminar las clases grabadas explícitamente
+            await supabase.from('clases_grabadas').delete().eq('curso_id', id);
+        }
+    } catch (err) {
+        console.error("Error cleaning up clases_grabadas:", err);
+    }
+    
     // Eliminar relaciones directas (ordenadas por dependencia)
     const tables = [
       "cursos_alumnos",
       "intereses",
-      "mensajes",
       "push_subscriptions",
       "notification_history",
-      "calendario_entregas", // Tiene cascade a entregas_alumnos
-      "clases_grabadas"
+      "calendario_entregas", 
+      "mensajes" // Ahora incluimos mensajes siempre, manejando el error
     ];
-
+    
     for (const table of tables) {
       try {
-        await supabase.from(table).delete().eq(table === "intereses" ? "course_id" : "curso_id", id);
+        const { error: deleteError } = await supabase.from(table).delete().eq(table === "intereses" ? "course_id" : "curso_id", id);
+        if (deleteError) {
+             // Ignorar error de sintaxis UUID (22P02)
+             if (deleteError.code !== '22P02' && !deleteError.message?.includes('invalid input syntax')) {
+                 console.error(`Error deleting from ${table}:`, deleteError);
+             }
+        }
       } catch (err) {
         console.error(`Error deleting from ${table}:`, err);
       }

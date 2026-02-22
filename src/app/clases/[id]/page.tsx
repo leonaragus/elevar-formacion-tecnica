@@ -6,9 +6,9 @@ import CommentsSection from '@/components/CommentsSection';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 interface PageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 async function resolvePublicUrls(
@@ -75,6 +75,7 @@ async function resolvePublicUrls(
 }
 
 export default async function VerClaseAlumnoPage({ params }: PageProps) {
+  const { id } = await params;
   const supabase = await createSupabaseServerClient();
   const adminSupabase = createSupabaseAdminClient();
 
@@ -82,7 +83,7 @@ export default async function VerClaseAlumnoPage({ params }: PageProps) {
   const { data: clase, error } = await supabase
     .from('clases_grabadas')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('activo', true)
     .eq('es_activo', true)
     .single();

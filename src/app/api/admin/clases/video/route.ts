@@ -527,34 +527,38 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: fetchError?.message || 'Clase no encontrada' }, { status: 404 });
     }
 
-    // 2. Eliminar archivos del storage
-    const filesToDelete = [clase.video_path];
-    if (clase.video_path_parte2) filesToDelete.push(clase.video_path_parte2);
-    if (clase.video_path_parte3) filesToDelete.push(clase.video_path_parte3);
-    if (clase.video_path_parte4) filesToDelete.push(clase.video_path_parte4);
-    
-    // Filtrar null/undefined/vacíos
-    const validFilesToDelete = filesToDelete.filter(p => p && typeof p === 'string' && p.trim() !== '');
-
-    if (validFilesToDelete.length > 0) {
-        let deleted = false;
+    // 2. Eliminar archivos del storage (Best Effort)
+    try {
+        const filesToDelete = [clase.video_path];
+        if (clase.video_path_parte2) filesToDelete.push(clase.video_path_parte2);
+        if (clase.video_path_parte3) filesToDelete.push(clase.video_path_parte3);
+        if (clase.video_path_parte4) filesToDelete.push(clase.video_path_parte4);
         
-        // 1. Try from public URL regex
-        if (clase.video_public_url) {
-            const match = clase.video_public_url.match(/\/storage\/v1\/object\/public\/([^\/]+)\//);
-            if (match && match[1]) {
-                const { error } = await supabase.storage.from(match[1]).remove(validFilesToDelete);
-                if (!error) deleted = true;
+        // Filtrar null/undefined/vacíos
+        const validFilesToDelete = filesToDelete.filter(p => p && typeof p === 'string' && p.trim() !== '');
+
+        if (validFilesToDelete.length > 0) {
+            let deleted = false;
+            
+            // 1. Try from public URL regex
+            if (clase.video_public_url) {
+                const match = clase.video_public_url.match(/\/storage\/v1\/object\/public\/([^\/]+)\//);
+                if (match && match[1]) {
+                    const { error } = await supabase.storage.from(match[1]).remove(validFilesToDelete);
+                    if (!error) deleted = true;
+                }
+            }
+
+            // 2. If not deleted (or no public URL), try known buckets
+            if (!deleted) {
+                 const buckets = ['videos', 'materiales', 'clases-grabadas'];
+                 for (const b of buckets) {
+                   await supabase.storage.from(b).remove(validFilesToDelete);
+                 }
             }
         }
-
-        // 2. If not deleted (or no public URL), try known buckets
-        if (!deleted) {
-             const buckets = ['videos', 'materiales', 'clases-grabadas'];
-             for (const b of buckets) {
-               await supabase.storage.from(b).remove(validFilesToDelete);
-             }
-        }
+    } catch (storageError) {
+        console.error('Error eliminando archivos de storage (ignorable):', storageError);
     }
 
     // 3. Actualizar DB (marcar como inactivo)

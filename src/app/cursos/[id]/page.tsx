@@ -14,11 +14,10 @@ function getCursoDescription(curso: CursoRow) {
   return typeof v === "string" && v.trim() ? v : "Sin descripción.";
 }
 
-export default async function CursoDetallePage({ params }: { params: { id: string } }) {
+export default async function CursoDetallePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-
-  const id = String(params.id);
 
   const { data: curso } = await supabase
     .from("cursos")

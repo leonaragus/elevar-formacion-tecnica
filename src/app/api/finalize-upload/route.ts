@@ -33,6 +33,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Faltan datos requeridos' }, { status: 400 });
     }
 
+    // Validate UUID format for cursoId to provide friendly error
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(cursoId)) {
+       console.error('Invalid cursoId format:', cursoId);
+       return NextResponse.json({ error: `El ID del curso no es válido para la base de datos (se espera UUID, se recibió: "${cursoId}"). Verifica que el curso seleccionado sea correcto.` }, { status: 400 });
+    }
+
     const supabase = createSupabaseAdminClient();
 
     // Generate public URLs
@@ -50,7 +57,8 @@ export async function POST(request: NextRequest) {
     const publicUrlParte3 = getPublicUrl(videoPathParte3);
     const publicUrlParte4 = getPublicUrl(videoPathParte4);
 
-    const duracionMin = duracion ? parseInt(duracion) : 0;
+    let duracionMin = duracion ? parseInt(duracion) : 0;
+    if (isNaN(duracionMin)) duracionMin = 0;
 
     let { data: insertData, error: insertError } = await supabase
       .from('clases_grabadas')
@@ -85,7 +93,7 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       console.error('Error inserting class:', insertError);
-      return NextResponse.json({ error: 'Error al guardar en base de datos' }, { status: 500 });
+      return NextResponse.json({ error: `Error al guardar en base de datos: ${insertError.message || JSON.stringify(insertError)}` }, { status: 500 });
     }
 
     if (!insertData) {
