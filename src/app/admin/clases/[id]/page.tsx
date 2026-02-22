@@ -294,6 +294,8 @@ export default async function VerClasePage({ params, searchParams }: PageProps) 
           <VideoPlayer
             videoUrl={urlsMain.url1 || clase.video_public_url}
             videoUrlParte2={urlsMain.url2 || clase.video_public_url_parte2}
+            videoUrlParte3={urlsMain.url3 || clase.video_public_url_parte3}
+            videoUrlParte4={urlsMain.url4 || clase.video_public_url_parte4}
             titulo={clase.titulo}
             transcripcionTexto={clase.transcripcion_texto}
             transcripcionSrt={clase.transcripcion_srt}

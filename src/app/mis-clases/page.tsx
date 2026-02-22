@@ -16,6 +16,69 @@ interface PageProps {
   }>;
 }
 
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+
+async function resolvePublicUrls(
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+  clase: any
+) {
+  const bucketPriority = ['videos', 'materiales', 'clases-grabadas'];
+  async function urlOk(url: string | undefined) {
+    if (!url) return false;
+    try {
+      const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+  let url1 = clase?.video_public_url || '';
+  let url2 = clase?.video_public_url_parte2 || '';
+  let url3 = clase?.video_public_url_parte3 || '';
+  let url4 = clase?.video_public_url_parte4 || '';
+  const videoPath = String(clase?.video_path || '');
+  const videoPath2 = String(clase?.video_path_parte2 || '');
+  const videoPath3 = String(clase?.video_path_parte3 || '');
+  const videoPath4 = String(clase?.video_path_parte4 || '');
+  if (!(await urlOk(url1)) && videoPath) {
+    for (const b of bucketPriority) {
+      const { data } = supabase.storage.from(b).getPublicUrl(videoPath);
+      if (await urlOk(data.publicUrl)) {
+        url1 = data.publicUrl;
+        break;
+      }
+    }
+  }
+  if (!(await urlOk(url2)) && videoPath2) {
+    for (const b of bucketPriority) {
+      const { data } = supabase.storage.from(b).getPublicUrl(videoPath2);
+      if (await urlOk(data.publicUrl)) {
+        url2 = data.publicUrl;
+        break;
+      }
+    }
+  }
+  if (!(await urlOk(url3)) && videoPath3) {
+    for (const b of bucketPriority) {
+      const { data } = supabase.storage.from(b).getPublicUrl(videoPath3);
+      if (await urlOk(data.publicUrl)) {
+        url3 = data.publicUrl;
+        break;
+      }
+    }
+  }
+  if (!(await urlOk(url4)) && videoPath4) {
+    for (const b of bucketPriority) {
+      const { data } = supabase.storage.from(b).getPublicUrl(videoPath4);
+      if (await urlOk(data.publicUrl)) {
+        url4 = data.publicUrl;
+        break;
+      }
+    }
+  }
+  return { url1, url2, url3, url4 };
+}
+
 export default async function MisClasesPage(props: PageProps) {
   const searchParams = await props.searchParams;
   const supabase = await createSupabaseServerClient();
@@ -203,6 +266,12 @@ export default async function MisClasesPage(props: PageProps) {
   const claseIdParam = searchParams?.clase_id;
   const claseSeleccionada = clases?.find(c => String(c.id) === String(claseIdParam)) || (clases && clases.length > 0 ? clases[0] : null);
 
+  let urls = { url1: '', url2: '', url3: '', url4: '' };
+  if (claseSeleccionada) {
+     // @ts-ignore
+     urls = await resolvePublicUrls(adminSupabase, claseSeleccionada);
+  }
+
   // 4. Obtener información del curso
   const { data: curso } = await adminSupabase
     .from('cursos')
@@ -241,10 +310,10 @@ export default async function MisClasesPage(props: PageProps) {
                 {/* Reproductor de Video */}
                 <div className="bg-black rounded-xl shadow-2xl overflow-hidden aspect-video">
                   <VideoPlayer
-                    videoUrl={claseSeleccionada.video_public_url}
-                    videoUrlParte2={claseSeleccionada.video_public_url_parte2}
-                    videoUrlParte3={claseSeleccionada.video_public_url_parte3}
-                    videoUrlParte4={claseSeleccionada.video_public_url_parte4}
+                    videoUrl={urls.url1 || claseSeleccionada.video_public_url}
+                    videoUrlParte2={urls.url2 || claseSeleccionada.video_public_url_parte2}
+                    videoUrlParte3={urls.url3 || claseSeleccionada.video_public_url_parte3}
+                    videoUrlParte4={urls.url4 || claseSeleccionada.video_public_url_parte4}
                     titulo={claseSeleccionada.titulo}
                     transcripcionTexto={claseSeleccionada.transcripcion_texto}
                     transcripcionSrt={claseSeleccionada.transcripcion_srt}

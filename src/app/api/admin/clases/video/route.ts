@@ -499,15 +499,58 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'Falta id' }, { status: 400 });
     }
+
+    // 1. Obtener detalles de la clase para eliminar los archivos
+    const { data: clase, error: fetchError } = await supabase
+      .from('clases_grabadas')
+      .select('id, video_path, video_path_parte2, video_path_parte3, video_path_parte4, video_public_url')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !clase) {
+      return NextResponse.json({ error: fetchError?.message || 'Clase no encontrada' }, { status: 404 });
+    }
+
+    // 2. Eliminar archivos del storage
+    // Determinar bucket
+    let deleteBucket = 'videos'; // Default
+    if (clase.video_public_url) {
+      const match = clase.video_public_url.match(/\/storage\/v1\/object\/public\/([^\/]+)\//);
+      if (match && match[1]) {
+        deleteBucket = match[1];
+      }
+    }
+
+    const filesToDelete = [clase.video_path];
+    if (clase.video_path_parte2) filesToDelete.push(clase.video_path_parte2);
+    if (clase.video_path_parte3) filesToDelete.push(clase.video_path_parte3);
+    if (clase.video_path_parte4) filesToDelete.push(clase.video_path_parte4);
+    
+    // Filtrar null/undefined/vacíos
+    const validFilesToDelete = filesToDelete.filter(p => p && typeof p === 'string' && p.trim() !== '');
+
+    if (validFilesToDelete.length > 0) {
+        const { error: storageError } = await supabase.storage
+            .from(deleteBucket)
+            .remove(validFilesToDelete);
+        
+        if (storageError) {
+            console.error('Error eliminando archivos del storage:', storageError);
+        }
+    }
+
+    // 3. Actualizar DB (marcar como inactivo)
     const { error } = await supabase
       .from('clases_grabadas')
       .update({ activo: false, es_activo: false, updated_at: new Date().toISOString() })
       .eq('id', id);
+
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     return NextResponse.json({ ok: true });
   } catch (error) {
+    console.error('Error en DELETE video:', error);
     return NextResponse.json({ error: 'Error al eliminar' }, { status: 500 });
   }
 }

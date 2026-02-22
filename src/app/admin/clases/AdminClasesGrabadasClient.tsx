@@ -8,11 +8,17 @@ import { devCursos } from "@/lib/devstore";
 interface ClaseGrabada {
   id: string;
   titulo: string;
+  descripcion?: string;
+  fecha_clase: string;
+  duracion_minutos?: number;
+  tiene_transcripcion?: boolean;
+  orden?: number;
   created_at?: string;
   es_activo?: boolean;
   video_public_url?: string;
   video_tamano_bytes?: number;
   curso_id?: string;
+  video_path: string;
 }
 
 interface Curso {
@@ -36,9 +42,10 @@ export default function AdminClasesGrabadasClient() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [transcripcionFile, setTranscripcionFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState('');
   
-  const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/avi", "video/mov", "video/webm"];
-  const PART_SIZE = 3 * 1024 * 1024; // 3MB chunks to satisfy Vercel 4.5MB limit
+  // 45MB chunks to be safe with Supabase limits and VideoPlayer logic
+  const PART_SIZE = 45 * 1024 * 1024; 
 
   // Cargar cursos del profesor
   useEffect(() => {
@@ -49,7 +56,7 @@ export default function AdminClasesGrabadasClient() {
   const verificarAutenticacion = async () => {
     try {
       const res = await fetch("/api/profesor/me", { cache: "no-store" });
-      const json = await res.json().catch(() => ({}));
+      await res.json().catch(() => ({}));
       setIsAuthenticated(true);
       cargarCursos();
     } catch (error) {
@@ -127,69 +134,157 @@ export default function AdminClasesGrabadasClient() {
     }
   };
 
+  const uploadFilePart = (url: string, fileChunk: Blob): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', url, true);
+      xhr.setRequestHeader('Content-Type', fileChunk.type || 'video/mp4');
+      
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve();
+        } else {
+          reject(new Error(`Upload failed with status ${xhr.status}`));
+        }
+      };
+      
+      xhr.onerror = () => reject(new Error('Network error during upload'));
+      xhr.send(fileChunk);
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cursoSeleccionado || !videoFile || !titulo) return;
 
+    // Validación de tamaño máximo (4 partes * 45MB = 180MB aprox)
+    // Supabase allows more but we want to stick to the convention
+    if (videoFile.size > 190 * 1024 * 1024) {
+      alert("El archivo es demasiado grande (máximo 180MB). Por favor comprímelo antes de subir.");
+      return;
+    }
+
     setUploading(true);
-      setUploadProgress(0);
+    setUploadProgress(0);
+    setStatusMessage('Iniciando subida...');
+    
+    try {
+      const fileSize = videoFile.size;
+      const totalPartes = Math.ceil(fileSize / PART_SIZE);
+      const esMultipart = totalPartes > 1;
       
-      try {
-        const totalChunks = Math.ceil(videoFile.size / PART_SIZE);
-        const uploadId = `${cursoSeleccionado}-${Date.now()}-${videoFile.name}`;
-        
-        for (let i = 0; i < totalChunks; i++) {
-          const start = i * PART_SIZE;
-          const end = Math.min(start + PART_SIZE, videoFile.size);
-          const chunk = videoFile.slice(start, end);
-          
-          const fd = new FormData();
-          fd.append("cursoId", cursoSeleccionado);
-          fd.append("titulo", titulo);
-          fd.append("descripcion", descripcion);
-          fd.append("duracion", duracion);
-          fd.append("fileName", videoFile.name);
-          fd.append("uploadId", uploadId);
-          fd.append("chunkIndex", String(i));
-          fd.append("totalChunks", String(totalChunks));
-          fd.append("isChunked", "1");
-          fd.append("videoChunk", chunk);
-          
-          if (i === totalChunks - 1 && transcripcionFile) {
-            const text = await transcripcionFile.text();
-            if (text.includes("-->") && /\d{2}:\d{2}:\d{2}/.test(text)) {
-              fd.append("transcripcionSrt", text);
-            } else {
-              fd.append("transcripcionTexto", text);
-            }
-          }
-          
-          const res = await fetch("/api/admin/clases/video", { method: "POST", body: fd });
-          const json = await res.json().catch(() => ({}));
-          
-          if (!res.ok || json?.error) {
-            throw new Error(json?.error || "Error al subir el video");
-          }
-          
-          // Actualizar progreso
-          const progress = Math.round(((i + 1) / totalChunks) * 100);
-          setUploadProgress(progress);
+      if (totalPartes > 4) {
+        throw new Error(`El archivo es demasiado grande para subirlo en partes (se requieren ${totalPartes} partes, máximo 4). Intenta comprimirlo.`);
+      }
+
+      // Use a timestamp and sanitized filename for unique ID
+      const timestamp = Date.now();
+      const sanitizedName = videoFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const uniqueName = `${timestamp}_${sanitizedName}`;
+      
+      const uploadedPaths: string[] = [];
+      let bucketUsed = 'videos';
+
+      for (let i = 0; i < totalPartes; i++) {
+        const start = i * PART_SIZE;
+        const end = Math.min(start + PART_SIZE, fileSize);
+        const chunk = videoFile.slice(start, end);
+        const partNum = i + 1; // 1-based index for parts
+        const partSuffix = esMultipart && partNum > 1 ? `.part${partNum}` : (esMultipart && partNum === 1 ? '.part1' : '');
+
+        setStatusMessage(`Subiendo parte ${partNum} de ${totalPartes}...`);
+
+        // 1. Obtener URL firmada
+        const resUrl = await fetch("/api/upload-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: videoFile.name,
+            filetype: videoFile.type,
+            fileSize: fileSize,
+            cursoId: cursoSeleccionado,
+            uniqueName: uniqueName,
+            partSuffix: partSuffix
+          })
+        });
+
+        if (!resUrl.ok) {
+          const errData = await resUrl.json().catch(() => ({}));
+          throw new Error(errData.error || "Error al obtener URL de subida");
         }
-  
-        // 6. Limpiar formulario y recargar
-        setTitulo('');
-        setDescripcion('');
-        setDuracion('');
-        setVideoFile(null);
-        setTranscripcionFile(null);
-        setUploadProgress(0);
-        
-        await cargarClases();
-        
-        alert('¡Clase grabada subida exitosamente!');
-        
-      } catch (error) {
+
+        const { signedUrl, path, bucket } = await resUrl.json();
+        uploadedPaths.push(path);
+        bucketUsed = bucket;
+
+        // 2. Subir el chunk directamente a Supabase
+        await uploadFilePart(signedUrl, chunk);
+
+        // Actualizar progreso
+        const progress = Math.round((partNum / totalPartes) * 100);
+        setUploadProgress(progress);
+      }
+
+      setStatusMessage('Procesando datos finales...');
+
+      // 3. Preparar datos de transcripción
+      let transcripcionTexto = '';
+      let transcripcionSrt = '';
+      if (transcripcionFile) {
+        const text = await transcripcionFile.text();
+        if (text.includes("-->") && /\d{2}:\d{2}:\d{2}/.test(text)) {
+          transcripcionSrt = text;
+        } else {
+          transcripcionTexto = text;
+        }
+      }
+
+      // 4. Finalizar subida (guardar en DB)
+      const finalizeBody = {
+        cursoId: cursoSeleccionado,
+        titulo,
+        descripcion,
+        duracion,
+        transcripcionTexto,
+        transcripcionSrt,
+        fileName: videoFile.name,
+        fileSize: fileSize,
+        bucket: bucketUsed,
+        videoPath: uploadedPaths[0],
+        videoPathParte2: uploadedPaths[1] || null,
+        videoPathParte3: uploadedPaths[2] || null,
+        videoPathParte4: uploadedPaths[3] || null,
+        esMultipart: esMultipart,
+        totalPartes: totalPartes
+      };
+
+      const resFinalize = await fetch("/api/finalize-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(finalizeBody)
+      });
+
+      if (!resFinalize.ok) {
+        const err = await resFinalize.json();
+        throw new Error(err.error || "Error al guardar en base de datos");
+      }
+
+      // 5. Limpiar formulario y recargar
+      setTitulo('');
+      setDescripcion('');
+      setDuracion('');
+      setVideoFile(null);
+      setTranscripcionFile(null);
+      setUploadProgress(0);
+      setStatusMessage('');
+      
+      await cargarClases();
+      
+      alert('¡Clase grabada subida exitosamente!');
+      
+    } catch (error) {
       console.error('Error subiendo clase:', error);
+      setStatusMessage('');
       alert('Error al subir la clase: ' + (error as Error).message);
     } finally {
       setUploading(false);
@@ -315,10 +410,10 @@ export default function AdminClasesGrabadasClient() {
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      if (!ALLOWED_VIDEO_TYPES.includes(file.type)) {
-                        alert('Tipo de archivo no permitido. Solo se permiten: MP4, AVI, MOV, WebM');
-                        e.target.value = '';
-                        return;
+                      // Check type
+                      if (!file.type.startsWith('video/')) {
+                         alert('Por favor selecciona un archivo de video válido.');
+                         return;
                       }
                       setVideoFile(file);
                     }
@@ -347,11 +442,14 @@ export default function AdminClasesGrabadasClient() {
               </button>
               
               {uploading && (
-                <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                  <div 
-                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
-                    style={{ width: `${uploadProgress}%` }}
-                  ></div>
+                <div className="mt-2">
+                   <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div 
+                      className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                      style={{ width: `${uploadProgress}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-xs text-center text-gray-500 mt-1">{statusMessage}</p>
                 </div>
               )}
             </form>
