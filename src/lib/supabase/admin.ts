@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 function getSupabaseAdminEnv() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  let url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   // Usamos un nombre de variable nuevo para romper cualquier cache de Vercel
   const key_admin = process.env.SUPABASE_ADMIN_KEY;
   const key_with_key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -13,8 +13,19 @@ function getSupabaseAdminEnv() {
   if (!url) throw new Error("Supabase URL faltante");
   if (!serviceKey) throw new Error(`Supabase Service Role Key faltante. Intentado buscar en: ${source}`);
 
+  // Sanitize URL: remove whitespace, fix trailing garbage
+  url = url.replace(/\s/g, '').replace(/\/$/, '');
+  // Fix common typos or paste errors
+  if (url.endsWith('.con')) {
+    url = url.slice(0, -1); // .con -> .co
+  }
+  // If it ends with .co followed by garbage (like 'n')
+  const match = url.match(/^(https:\/\/.*\.supabase\.co)/);
+  if (match) {
+    url = match[1];
+  }
+
   // Limpiar absolutamente todo: espacios, nuevas líneas, comillas e interpolaciones fallidas
-  const originalKey = serviceKey;
   serviceKey = serviceKey.replace(/\s/g, '').replace(/^["']|["']$/g, '');
 
   if (serviceKey.includes('${')) {
