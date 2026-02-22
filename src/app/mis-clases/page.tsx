@@ -32,49 +32,48 @@ async function resolvePublicUrls(
       return false;
     }
   }
+
+  async function getWorkingUrl(path: string) {
+    if (!path) return null;
+    for (const b of bucketPriority) {
+      // 1. Try public URL
+      const { data: publicData } = supabase.storage.from(b).getPublicUrl(path);
+      if (await urlOk(publicData.publicUrl)) return publicData.publicUrl;
+      
+      // 2. Try signed URL (valid for 24h) if public failed (e.g. private bucket)
+      try {
+        const { data: signedData } = await supabase.storage.from(b).createSignedUrl(path, 60 * 60 * 24);
+        if (signedData?.signedUrl && await urlOk(signedData.signedUrl)) return signedData.signedUrl;
+      } catch {}
+    }
+    return null;
+  }
+
   let url1 = clase?.video_public_url || '';
   let url2 = clase?.video_public_url_parte2 || '';
   let url3 = clase?.video_public_url_parte3 || '';
   let url4 = clase?.video_public_url_parte4 || '';
+  
   const videoPath = String(clase?.video_path || '');
   const videoPath2 = String(clase?.video_path_parte2 || '');
   const videoPath3 = String(clase?.video_path_parte3 || '');
   const videoPath4 = String(clase?.video_path_parte4 || '');
+
   if (!(await urlOk(url1)) && videoPath) {
-    for (const b of bucketPriority) {
-      const { data } = supabase.storage.from(b).getPublicUrl(videoPath);
-      if (await urlOk(data.publicUrl)) {
-        url1 = data.publicUrl;
-        break;
-      }
-    }
+    const resolved = await getWorkingUrl(videoPath);
+    if (resolved) url1 = resolved;
   }
   if (!(await urlOk(url2)) && videoPath2) {
-    for (const b of bucketPriority) {
-      const { data } = supabase.storage.from(b).getPublicUrl(videoPath2);
-      if (await urlOk(data.publicUrl)) {
-        url2 = data.publicUrl;
-        break;
-      }
-    }
+    const resolved = await getWorkingUrl(videoPath2);
+    if (resolved) url2 = resolved;
   }
   if (!(await urlOk(url3)) && videoPath3) {
-    for (const b of bucketPriority) {
-      const { data } = supabase.storage.from(b).getPublicUrl(videoPath3);
-      if (await urlOk(data.publicUrl)) {
-        url3 = data.publicUrl;
-        break;
-      }
-    }
+    const resolved = await getWorkingUrl(videoPath3);
+    if (resolved) url3 = resolved;
   }
   if (!(await urlOk(url4)) && videoPath4) {
-    for (const b of bucketPriority) {
-      const { data } = supabase.storage.from(b).getPublicUrl(videoPath4);
-      if (await urlOk(data.publicUrl)) {
-        url4 = data.publicUrl;
-        break;
-      }
-    }
+    const resolved = await getWorkingUrl(videoPath4);
+    if (resolved) url4 = resolved;
   }
   return { url1, url2, url3, url4 };
 }

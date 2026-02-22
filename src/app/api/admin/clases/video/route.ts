@@ -403,9 +403,25 @@ export async function POST(request: NextRequest) {
         if ((videoAEliminar as any).video_path_parte2) {
           toRemove.push((videoAEliminar as any).video_path_parte2);
         }
-        const { error: deleteError2 } = await supabase.storage
-          .from(bucket)
-          .remove(toRemove);
+        if ((videoAEliminar as any).video_path_parte3) {
+          toRemove.push((videoAEliminar as any).video_path_parte3);
+        }
+        if ((videoAEliminar as any).video_path_parte4) {
+          toRemove.push((videoAEliminar as any).video_path_parte4);
+        }
+
+        let deleted = false;
+        // 1. Try from public URL regex if available (not selected in query currently, need to update select)
+        // Wait, the select query above only selects id, video_path, orden.
+        // We need video_public_url to try regex.
+        
+        // Let's just try all buckets as fallback since we don't have public_url selected here easily without changing the query.
+        // Or update the query.
+        
+        const buckets = ['videos', 'materiales', 'clases-grabadas'];
+        for (const b of buckets) {
+            await supabase.storage.from(b).remove(toRemove);
+        }
       }
     }
 
@@ -512,15 +528,6 @@ export async function DELETE(request: NextRequest) {
     }
 
     // 2. Eliminar archivos del storage
-    // Determinar bucket
-    let deleteBucket = 'videos'; // Default
-    if (clase.video_public_url) {
-      const match = clase.video_public_url.match(/\/storage\/v1\/object\/public\/([^\/]+)\//);
-      if (match && match[1]) {
-        deleteBucket = match[1];
-      }
-    }
-
     const filesToDelete = [clase.video_path];
     if (clase.video_path_parte2) filesToDelete.push(clase.video_path_parte2);
     if (clase.video_path_parte3) filesToDelete.push(clase.video_path_parte3);
@@ -530,12 +537,23 @@ export async function DELETE(request: NextRequest) {
     const validFilesToDelete = filesToDelete.filter(p => p && typeof p === 'string' && p.trim() !== '');
 
     if (validFilesToDelete.length > 0) {
-        const { error: storageError } = await supabase.storage
-            .from(deleteBucket)
-            .remove(validFilesToDelete);
+        let deleted = false;
         
-        if (storageError) {
-            console.error('Error eliminando archivos del storage:', storageError);
+        // 1. Try from public URL regex
+        if (clase.video_public_url) {
+            const match = clase.video_public_url.match(/\/storage\/v1\/object\/public\/([^\/]+)\//);
+            if (match && match[1]) {
+                const { error } = await supabase.storage.from(match[1]).remove(validFilesToDelete);
+                if (!error) deleted = true;
+            }
+        }
+
+        // 2. If not deleted (or no public URL), try known buckets
+        if (!deleted) {
+             const buckets = ['videos', 'materiales', 'clases-grabadas'];
+             for (const b of buckets) {
+               await supabase.storage.from(b).remove(validFilesToDelete);
+             }
         }
     }
 

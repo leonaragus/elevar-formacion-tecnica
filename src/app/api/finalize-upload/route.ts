@@ -94,10 +94,11 @@ export async function POST(request: NextRequest) {
     try {
       const { data: videosActuales, error: countError } = await supabase
         .from('clases_grabadas')
-        .select('id, video_path, video_path_parte2, video_path_parte3, video_path_parte4, orden, video_public_url')
+        .select('id, video_path, video_path_parte2, video_path_parte3, video_path_parte4, orden, video_public_url, created_at')
         .eq('curso_id', cursoId)
         .eq('activo', true)
-        .order('orden', { ascending: true }); // Oldest first (assuming lower orden is older/default sort)
+        .order('orden', { ascending: true })
+        .order('created_at', { ascending: true }); // Ensure oldest is first if orden is same
 
       if (!countError && Array.isArray(videosActuales) && videosActuales.length > 2) {
         // Remove the oldest ones until only 2 remain
@@ -114,22 +115,31 @@ export async function POST(request: NextRequest) {
           .eq('id', videoAEliminar.id);
 
         if (!updateError) {
-          // Determine bucket from public URL or default to 'videos'
-          let deleteBucket = bucket; // Default to current bucket (unsafe)
-          if (videoAEliminar.video_public_url) {
-            const match = videoAEliminar.video_public_url.match(/\/storage\/v1\/object\/public\/([^\/]+)\//);
-            if (match && match[1]) {
-              deleteBucket = match[1];
-            }
-          }
-
           // Remove files from storage
           const toRemove = [videoAEliminar.video_path];
           if (videoAEliminar.video_path_parte2) toRemove.push(videoAEliminar.video_path_parte2);
           if (videoAEliminar.video_path_parte3) toRemove.push(videoAEliminar.video_path_parte3);
           if (videoAEliminar.video_path_parte4) toRemove.push(videoAEliminar.video_path_parte4);
           
-          await supabase.storage.from(deleteBucket).remove(toRemove);
+          // Try to determine bucket
+          let deleted = false;
+          
+          // 1. Try from public URL regex
+          if (videoAEliminar.video_public_url) {
+            const match = videoAEliminar.video_public_url.match(/\/storage\/v1\/object\/public\/([^\/]+)\//);
+            if (match && match[1]) {
+              const { error } = await supabase.storage.from(match[1]).remove(toRemove);
+              if (!error) deleted = true;
+            }
+          }
+
+          // 2. If not deleted, try known buckets
+          if (!deleted) {
+             const buckets = ['videos', 'materiales', 'clases-grabadas'];
+             for (const b of buckets) {
+               await supabase.storage.from(b).remove(toRemove);
+             }
+          }
         }
       }
     } catch (cleanupError) {
