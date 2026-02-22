@@ -88,6 +88,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Error al guardar en base de datos' }, { status: 500 });
     }
 
+    if (!insertData) {
+      return NextResponse.json({ error: 'No se recibieron datos de la inserción' }, { status: 500 });
+    }
+
     const claseRowId = insertData.id;
 
     // Cleanup old videos logic (keep max 2 active)
@@ -117,9 +121,9 @@ export async function POST(request: NextRequest) {
         if (!updateError) {
           // Remove files from storage
           const toRemove = [videoAEliminar.video_path];
-          if (videoAEliminar.video_path_parte2) toRemove.push(videoAEliminar.video_path_parte2);
-          if (videoAEliminar.video_path_parte3) toRemove.push(videoAEliminar.video_path_parte3);
-          if (videoAEliminar.video_path_parte4) toRemove.push(videoAEliminar.video_path_parte4);
+          if ((videoAEliminar as any).video_path_parte2) toRemove.push((videoAEliminar as any).video_path_parte2);
+          if ((videoAEliminar as any).video_path_parte3) toRemove.push((videoAEliminar as any).video_path_parte3);
+          if ((videoAEliminar as any).video_path_parte4) toRemove.push((videoAEliminar as any).video_path_parte4);
           
           // Try to determine bucket
           let deleted = false;
