@@ -9,20 +9,37 @@ export async function POST() {
     step = 'createClient';
     const supabase = createSupabaseAdminClient();
     
+    // Check Auth connectivity
+    step = 'checkAuth';
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const authStatus = authError ? `Error: ${authError.message}` : `User: ${authData.user?.id || 'none'}`;
+
+    // Check Storage connectivity
     step = 'listBuckets';
     const { data, error } = await supabase.storage.listBuckets();
     
     if (error) {
+      const originalErr = (error as any).originalError;
       return NextResponse.json({ 
         error: error.message, 
         step,
-        details: error
+        authStatus,
+        details: {
+          ...error,
+          originalError: {
+            message: originalErr?.message,
+            cause: originalErr?.cause ? String(originalErr.cause) : undefined,
+            stack: originalErr?.stack,
+            type: originalErr?.constructor?.name
+          }
+        }
       }, { status: 500 });
     }
 
     return NextResponse.json({ 
       status: 'ok', 
       message: 'V2 buckets listed',
+      authStatus,
       buckets: data.map(b => b.name)
     });
   } catch (e) {
