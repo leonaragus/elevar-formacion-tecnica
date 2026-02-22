@@ -282,9 +282,26 @@ export async function DELETE(req: NextRequest) {
     if (titulo) {
       await supabase.from("evaluaciones").delete().eq("course_name", titulo);
     }
-    await supabase.from("cursos_alumnos").delete().eq("curso_id", id);
-    await supabase.from("intereses").delete().eq("course_id", id);
     
+    // Eliminar relaciones directas (ordenadas por dependencia)
+    const tables = [
+      "cursos_alumnos",
+      "intereses",
+      "mensajes",
+      "push_subscriptions",
+      "notification_history",
+      "calendario_entregas", // Tiene cascade a entregas_alumnos
+      "clases_grabadas"
+    ];
+
+    for (const table of tables) {
+      try {
+        await supabase.from(table).delete().eq(table === "intereses" ? "course_id" : "curso_id", id);
+      } catch (err) {
+        console.error(`Error deleting from ${table}:`, err);
+      }
+    }
+
     // 3. Limpieza de archivos en storage (opcional/deseable)
     try {
       const { data: files } = await supabase.storage.from("materiales").list(id);

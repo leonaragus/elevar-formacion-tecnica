@@ -35,9 +35,10 @@ export default function AdminClasesGrabadasClient() {
   const [duracion, setDuracion] = useState('');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [transcripcionFile, setTranscripcionFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   
   const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/avi", "video/mov", "video/webm"];
-  const PART_SIZE = 45 * 1024 * 1024;
+  const PART_SIZE = 3 * 1024 * 1024; // 3MB chunks to satisfy Vercel 4.5MB limit
 
   // Cargar cursos del profesor
   useEffect(() => {
@@ -131,52 +132,63 @@ export default function AdminClasesGrabadasClient() {
     if (!cursoSeleccionado || !videoFile || !titulo) return;
 
     setUploading(true);
-    
-    try {
-      const totalChunks = Math.ceil(videoFile.size / PART_SIZE);
-      const uploadId = `${cursoSeleccionado}-${Date.now()}-${videoFile.name}`;
-      for (let i = 0; i < totalChunks; i++) {
-        const start = i * PART_SIZE;
-        const end = Math.min(start + PART_SIZE, videoFile.size);
-        const chunk = videoFile.slice(start, end);
-        const fd = new FormData();
-        fd.append("cursoId", cursoSeleccionado);
-        fd.append("titulo", titulo);
-        fd.append("descripcion", descripcion);
-        fd.append("duracion", duracion);
-        fd.append("fileName", videoFile.name);
-        fd.append("uploadId", uploadId);
-        fd.append("chunkIndex", String(i));
-        fd.append("totalChunks", String(totalChunks));
-        fd.append("isChunked", "1");
-        fd.append("videoChunk", chunk);
-        if (i === totalChunks - 1 && transcripcionFile) {
-          const text = await transcripcionFile.text();
-          if (text.includes("-->") && /\d{2}:\d{2}:\d{2}/.test(text)) {
-            fd.append("transcripcionSrt", text);
-          } else {
-            fd.append("transcripcionTexto", text);
+      setUploadProgress(0);
+      
+      try {
+        const totalChunks = Math.ceil(videoFile.size / PART_SIZE);
+        const uploadId = `${cursoSeleccionado}-${Date.now()}-${videoFile.name}`;
+        
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * PART_SIZE;
+          const end = Math.min(start + PART_SIZE, videoFile.size);
+          const chunk = videoFile.slice(start, end);
+          
+          const fd = new FormData();
+          fd.append("cursoId", cursoSeleccionado);
+          fd.append("titulo", titulo);
+          fd.append("descripcion", descripcion);
+          fd.append("duracion", duracion);
+          fd.append("fileName", videoFile.name);
+          fd.append("uploadId", uploadId);
+          fd.append("chunkIndex", String(i));
+          fd.append("totalChunks", String(totalChunks));
+          fd.append("isChunked", "1");
+          fd.append("videoChunk", chunk);
+          
+          if (i === totalChunks - 1 && transcripcionFile) {
+            const text = await transcripcionFile.text();
+            if (text.includes("-->") && /\d{2}:\d{2}:\d{2}/.test(text)) {
+              fd.append("transcripcionSrt", text);
+            } else {
+              fd.append("transcripcionTexto", text);
+            }
           }
+          
+          const res = await fetch("/api/admin/clases/video", { method: "POST", body: fd });
+          const json = await res.json().catch(() => ({}));
+          
+          if (!res.ok || json?.error) {
+            throw new Error(json?.error || "Error al subir el video");
+          }
+          
+          // Actualizar progreso
+          const progress = Math.round(((i + 1) / totalChunks) * 100);
+          setUploadProgress(progress);
         }
-        const res = await fetch("/api/admin/clases/video", { method: "POST", body: fd });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok || json?.error) {
-          throw new Error(json?.error || "Error al subir el video");
-        }
-      }
-
-      // 6. Limpiar formulario y recargar
-      setTitulo('');
-      setDescripcion('');
-      setDuracion('');
-      setVideoFile(null);
-      setTranscripcionFile(null);
-      
-      await cargarClases();
-      
-      alert('¡Clase grabada subida exitosamente!');
-      
-    } catch (error) {
+  
+        // 6. Limpiar formulario y recargar
+        setTitulo('');
+        setDescripcion('');
+        setDuracion('');
+        setVideoFile(null);
+        setTranscripcionFile(null);
+        setUploadProgress(0);
+        
+        await cargarClases();
+        
+        alert('¡Clase grabada subida exitosamente!');
+        
+      } catch (error) {
       console.error('Error subiendo clase:', error);
       alert('Error al subir la clase: ' + (error as Error).message);
     } finally {
@@ -331,8 +343,17 @@ export default function AdminClasesGrabadasClient() {
                 disabled={uploading || !videoFile}
                 className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
               >
-                {uploading ? 'Subiendo...' : 'Subir Clase'}
+                {uploading ? `Subiendo... ${uploadProgress}%` : 'Subir Clase'}
               </button>
+              
+              {uploading && (
+                <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                  <div 
+                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+              )}
             </form>
             
             <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
