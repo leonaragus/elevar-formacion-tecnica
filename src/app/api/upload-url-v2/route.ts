@@ -4,23 +4,35 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 export const runtime = 'nodejs';
 
 export async function POST() {
+  let step = 'init';
   try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_ADMIN_KEY;
+    step = 'createClient';
+    const supabase = createSupabaseAdminClient();
     
+    step = 'listBuckets';
+    const { data, error } = await supabase.storage.listBuckets();
+    
+    if (error) {
+      return NextResponse.json({ 
+        error: error.message, 
+        step,
+        details: error
+      }, { status: 500 });
+    }
+
     return NextResponse.json({ 
       status: 'ok', 
-      message: 'V2 is alive with imports',
-      env: {
-        urlExists: !!url,
-        urlLen: url?.length,
-        urlPrefix: url?.substring(0, 8),
-        keyExists: !!key,
-        keyLen: key?.length,
-        keyPrefix: key?.substring(0, 5)
-      }
+      message: 'V2 buckets listed',
+      buckets: data.map(b => b.name)
     });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    const err = e as any;
+    return NextResponse.json({ 
+      error: String(err), 
+      message: err.message,
+      cause: err.cause ? String(err.cause) : undefined,
+      stack: err.stack,
+      step 
+    }, { status: 500 });
   }
 }
