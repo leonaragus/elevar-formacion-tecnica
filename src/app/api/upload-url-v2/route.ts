@@ -1,55 +1,39 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 export const runtime = 'nodejs';
 
 export async function POST() {
-  let step = 'init';
-  try {
-    step = 'createClient';
-    const supabase = createSupabaseAdminClient();
-    
-    // Check Auth connectivity
-    step = 'checkAuth';
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    const authStatus = authError ? `Error: ${authError.message}` : `User: ${authData.user?.id || 'none'}`;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  
+  // Analyze URL structure
+  const urlAnalysis = {
+    value: url, // Be careful with this in production, but needed for debugging
+    length: url.length,
+    hasWhitespace: /\s/.test(url),
+    startsWithHttps: url.startsWith('https://'),
+    endsWithCo: url.endsWith('.co'),
+    endsWithCom: url.endsWith('.com'),
+    endsWithCon: url.endsWith('.con'),
+    parts: url.split('.'),
+    whitespaceIndices: [] as number[],
+    charCodes: [] as number[]
+  };
 
-    // Check Storage connectivity
-    step = 'listBuckets';
-    const { data, error } = await supabase.storage.listBuckets();
-    
-    if (error) {
-      const originalErr = (error as any).originalError;
-      return NextResponse.json({ 
-        error: error.message, 
-        step,
-        authStatus,
-        details: {
-          ...error,
-          originalError: {
-            message: originalErr?.message,
-            cause: originalErr?.cause ? String(originalErr.cause) : undefined,
-            stack: originalErr?.stack,
-            type: originalErr?.constructor?.name
-          }
-        }
-      }, { status: 500 });
+  for (let i = 0; i < url.length; i++) {
+    if (/\s/.test(url[i])) {
+      urlAnalysis.whitespaceIndices.push(i);
     }
-
-    return NextResponse.json({ 
-      status: 'ok', 
-      message: 'V2 buckets listed',
-      authStatus,
-      buckets: data.map(b => b.name)
-    });
-  } catch (e) {
-    const err = e as any;
-    return NextResponse.json({ 
-      error: String(err), 
-      message: err.message,
-      cause: err.cause ? String(err.cause) : undefined,
-      stack: err.stack,
-      step 
-    }, { status: 500 });
+    // Log char codes for non-alphanumeric chars to detect hidden chars
+    if (!/[a-zA-Z0-9:\/\.]/.test(url[i])) {
+      urlAnalysis.charCodes.push(url.charCodeAt(i));
+    }
   }
+
+  return NextResponse.json({ 
+    status: 'diagnostic', 
+    urlAnalysis,
+    keyPrefix: key.substring(0, 5),
+    keyLength: key.length
+  });
 }
