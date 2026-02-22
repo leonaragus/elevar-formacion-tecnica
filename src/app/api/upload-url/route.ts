@@ -22,12 +22,15 @@ async function pickBucket(supabase: ReturnType<typeof createSupabaseAdminClient>
 }
 
 export async function POST(request: NextRequest) {
+  let step = 'init';
   try {
+    step = 'checkCookie';
     const hasProfCookie = request.cookies.get('prof_code_ok')?.value === '1';
     if (!hasProfCookie) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
+    step = 'parseBody';
     const body = await request.json();
     const { filename, filetype, cursoId, fileSize } = body;
 
@@ -35,9 +38,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Faltan datos requeridos' }, { status: 400 });
     }
 
+    step = 'createClient';
     const supabase = createSupabaseAdminClient();
     
     // Determine bucket
+    step = 'pickBucket';
     const bucket = await pickBucket(supabase, fileSize || 0);
     
     // Create path
@@ -61,6 +66,7 @@ export async function POST(request: NextRequest) {
     const partSuffix = body.partSuffix || '';
     const filePath = `cursos/${cursoId}/videos/${baseName}${partSuffix}`;
     
+    step = 'createSignedUploadUrl';
     const { data, error } = await supabase.storage
       .from(bucket)
       .createSignedUploadUrl(filePath);
@@ -88,7 +94,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       error: errorMessage,
       stack: errorStack,
-      cause: errorCause
+      cause: errorCause,
+      step: step
     }, { status: 500 });
   }
 }
