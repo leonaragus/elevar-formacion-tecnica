@@ -80,6 +80,15 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Error in upload-url:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    // Return detailed error for debugging
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : '';
+    const errorCause = error instanceof Error ? String((error as any).cause) : '';
+    
+    return NextResponse.json({ 
+      error: errorMessage,
+      stack: errorStack,
+      cause: errorCause
+    }, { status: 500 });
   }
 }
