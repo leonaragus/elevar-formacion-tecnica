@@ -62,35 +62,40 @@ export async function POST(req: NextRequest) {
         }, { status: 400 });
       }
 
+      // Validar si el curso existe
+      if (supabaseAdmin) {
+        console.log("Verificando existencia del curso:", curso_id);
+        const { data: cursoData, error: cursoError } = await supabaseAdmin
+          .from("cursos")
+          .select("id")
+          .eq("id", curso_id)
+          .maybeSingle();
+        
+        if (cursoError) {
+           console.error("Error verificando curso:", cursoError);
+        } else if (!cursoData) {
+           console.error("El curso NO existe en la base de datos:", curso_id);
+        } else {
+           console.log("Curso verificado exitosamente.");
+        }
+      }
+
       let wroteDb = false;
       let dbError: string | null = null;
 
-      if (supabaseAdmin) {
-        // Intentar insertar en intereses como respaldo siempre
-        try {
-          console.log(`Intentando insertar en intereses (auth) para ${email} curso ${curso_id}`);
-          const { error: intErr } = await supabaseAdmin
-            .from("intereses")
-            .upsert({ 
-              email, 
-              course_id: curso_id, 
-              created_at: new Date().toISOString() 
-            }, { onConflict: "email,course_id" });
-          
-          if (intErr) {
-            console.error("Error al insertar en intereses (auth):", intErr);
-            dbError = intErr.message;
-          } else {
-            console.log("Inserción/Upsert exitosa en intereses (auth)");
-            wroteDb = true;
-          }
-        } catch (e: any) {
-          console.error("Excepción al insertar en intereses (auth):", e);
-          dbError = e.message;
-        }
-
+      if (user && supabaseAdmin) {
         console.log(`Intentando upsert en cursos_alumnos para user_id ${user.id} curso ${curso_id}`);
-        const { error } = await supabaseAdmin
+        
+        // Verificar si ya existe
+        const { data: existing, error: fetchErr } = await supabaseAdmin
+            .from("cursos_alumnos")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("curso_id", curso_id);
+            
+        console.log("Estado actual inscripción:", { existing, error: fetchErr });
+
+        const { data: upsertData, error } = await supabaseAdmin
           .from("cursos_alumnos")
           .upsert(
             { 
@@ -100,30 +105,28 @@ export async function POST(req: NextRequest) {
               created_at: new Date().toISOString() 
             }, 
             { onConflict: "curso_id,user_id", ignoreDuplicates: false }
-          );
+          )
+          .select();
         
         if (!error) {
-          console.log("Upsert exitoso en cursos_alumnos");
+          console.log("Upsert exitoso en cursos_alumnos. Datos:", upsertData);
           wroteDb = true;
         } else {
           console.error("Error al insertar en cursos_alumnos (auth):", error);
           dbError = error.message;
         }
+      } else if (!supabaseAdmin) {
+        dbError = "No se pudo inicializar el cliente de administración de Supabase. Verifique las variables de entorno (SUPABASE_SERVICE_ROLE_KEY).";
+        console.error(dbError);
       }
 
       if (!wroteDb) {
-        // Fallback a devstore si falla la DB real
-        console.warn("Usando fallback de devstore para inscripción (auth). Error DB:", dbError);
-        try {
-          devInscripciones.push({
-            user_id: user.id,
-            curso_id: curso_id,
-            estado: "pendiente"
-          });
-          wroteDb = true;
-        } catch (e) {
-          console.error("Error crítico en fallback devstore (auth):", e);
+        // Si falló la escritura en DB, devolvemos error al cliente para que no piense que funcionó
+        const msg = dbError || "Error desconocido al guardar inscripción";
+        if (isForm) {
+          return NextResponse.redirect(new URL(`/cursos?error=${encodeURIComponent(msg)}`, req.url));
         }
+        return NextResponse.json({ ok: false, error: msg }, { status: 500 });
       }
 
       if (isForm) {
@@ -184,21 +187,18 @@ export async function POST(req: NextRequest) {
           console.error("Excepción al insertar en intereses (unauth):", e);
           dbError = e.message;
         }
+      } else {
+        dbError = "No se pudo inicializar el cliente de administración de Supabase.";
+        console.error(dbError);
       }
 
       if (!wroteDb) {
-        // Fallback a devstore si falla la DB real
-        console.warn("Usando fallback de devstore para intereses (unauth). Error DB:", dbError);
-        try {
-          devIntereses.push({
-            email,
-            curso_id: curso_id,
-            when: new Date().toISOString()
-          });
-          wroteDb = true;
-        } catch (e) {
-          console.error("Error crítico en fallback devstore (unauth):", e);
+        // Si falló, reportar error
+        const msg = dbError || "Error desconocido al guardar solicitud";
+        if (isForm) {
+            return NextResponse.redirect(new URL(`/cursos?error=${encodeURIComponent(msg)}`, req.url));
         }
+        return NextResponse.json({ ok: false, error: msg }, { status: 500 });
       }
 
       if (isForm) {

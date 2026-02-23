@@ -78,72 +78,11 @@ export function upsertPerfil(email: string, meta: Partial<DevPerfil>) {
   }
 }
 
-devCursos.push({
-  id: "liquidacion-de-sueldos",
-  titulo: "Liquidación de Sueldos",
-  descripcion: "Curso práctico sobre liquidación de sueldos y normativa vigente.",
-  duracion: "6 meses",
-  modalidad: "virtual",
-  categoria: "RRHH",
-  nivel: "inicial",
-  precio: 0,
-  estado: "activo",
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-});
-devCursos.push({
-  id: "gestion-documental",
-  titulo: "Diplomatura en Gestión y Control Documental",
-  descripcion: "Aprende a gestionar documentación técnica y legal de forma profesional.",
-  duracion: "6 meses",
-  modalidad: "virtual",
-  categoria: "Administración",
-  nivel: "inicial",
-  precio: 0,
-  estado: "activo",
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-});
 
-// Datos de prueba para Admin
-devInscripciones.push({
-  user_id: "alumno.pendiente@test.com",
-  curso_id: "liquidacion-de-sueldos",
-  estado: "pendiente"
-});
+// Datos de prueba eliminados para evitar confusión en producción
+// devInscripciones.push({ ... });
+// devMateriales.push({ ... });
 
-devMateriales.push(
-  {
-    id: "mat-lds-1",
-    curso_id: "liquidacion-de-sueldos",
-    titulo: "Introducción a la Liquidación de Sueldos",
-    curso: "Liquidación de Sueldos",
-    tipo: "PDF",
-    tamaño: "1.2 MB",
-    fecha: new Date().toLocaleDateString("es-AR"),
-    descargas: 0,
-  },
-  {
-    id: "mat-lds-2",
-    curso_id: "liquidacion-de-sueldos",
-    titulo: "Convenios y Normativa Actual",
-    curso: "Liquidación de Sueldos",
-    tipo: "PDF",
-    tamaño: "2.8 MB",
-    fecha: new Date().toLocaleDateString("es-AR"),
-    descargas: 0,
-  },
-  {
-    id: "mat-lds-3",
-    curso_id: "liquidacion-de-sueldos",
-    titulo: "Ejercicios Prácticos",
-    curso: "Liquidación de Sueldos",
-    tipo: "PDF",
-    tamaño: "900 KB",
-    fecha: new Date().toLocaleDateString("es-AR"),
-    descargas: 0,
-  }
-);
 
 export function upsertInscripcion(user_id: string, curso_id: string, estado: DevInscripcion["estado"]) {
   const idx = devInscripciones.findIndex((i) => i.user_id === user_id && i.curso_id === curso_id);
@@ -191,87 +130,4 @@ export type DevRespuestaEvaluacion = {
 
 export const devRespuestasEvaluacion: DevRespuestaEvaluacion[] = [];
 
-devEvaluaciones.push({
-  id: "eval-lds-1",
-  title: "Evaluación Inicial: Liquidación de Sueldos",
-  course_name: "Liquidación de Sueldos",
-  source_filename: "Normativa_Laboral_2026.pdf",
-  questions: [
-    {
-      question: "¿Qué concepto corresponde a aportes obligatorios del empleado?",
-      options: ["Obra social", "Sueldo básico", "Horas extra", "Premios"],
-      correctAnswer: 0,
-    },
-    {
-      question: "¿Cuál es el período habitual de liquidación mensual?",
-      options: ["Del 1 al 10", "Del 1 al 30/31", "Del 15 al 30", "Del 20 al 20"],
-      correctAnswer: 1,
-    },
-    {
-      question: "¿Qué se considera remunerativo?",
-      options: ["Viáticos no comprobables", "Bonificación no remunerativa", "Sueldo básico", "Asignaciones familiares"],
-      correctAnswer: 2,
-    },
-    {
-      question: "¿Qué organismo administra las contribuciones patronales?",
-      options: ["AFIP", "ANSES", "SRT", "INDEC"],
-      correctAnswer: 0,
-    },
-    {
-      question: "¿Qué documento formaliza la relación laboral?",
-      options: ["CUIL", "Convenio colectivo", "Recibo de sueldo", "Contrato de trabajo"],
-      correctAnswer: 3,
-    },
-  ],
-  created_at: new Date().toISOString(),
-});
-
-devEvaluaciones.push({
-  id: "eval-gestion-doc-1",
-  title: "Evaluación Demo: Gestión Documental",
-  course_name: "Diplomatura en Gestión y Control Documental",
-  source_filename: null,
-  questions: [
-    {
-      question: "¿Cuál es el objetivo principal del control documental?",
-      options: [
-        "Garantizar trazabilidad y versión única",
-        "Incrementar costos operativos",
-        "Eliminar auditorías",
-        "Evitar respaldos",
-      ],
-      correctAnswer: 0,
-    },
-    {
-      question: "¿Qué metadato es clave para la búsqueda eficaz?",
-      options: ["Color de papel", "Fecha y autor", "Tamaño de fuente", "Tipo de grapa"],
-      correctAnswer: 1,
-    },
-    {
-      question: "¿Qué política asegura integridad del documento?",
-      options: ["Control de versiones", "Impresión en masa", "Uso de carpetas físicas", "Compartir por mensajería"],
-      correctAnswer: 0,
-    },
-    {
-      question: "¿Cuál es la diferencia entre copia y original controlado?",
-      options: [
-        "Original controlado posee aprobación y trazabilidad",
-        "No hay diferencia",
-        "La copia es siempre firmada digitalmente",
-        "Original nunca se distribuye",
-      ],
-      correctAnswer: 0,
-    },
-    {
-      question: "¿Qué requisito es típico de auditorías ISO para documentación?",
-      options: [
-        "Obligatorio registro de cambios y responsables",
-        "Uso exclusivo de archivos impresos",
-        "Eliminar históricos",
-        "Evitar respaldos",
-      ],
-      correctAnswer: 0,
-    },
-  ],
-  created_at: new Date().toISOString(),
-});
+// devEvaluaciones.push({ ... });

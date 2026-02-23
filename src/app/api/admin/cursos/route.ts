@@ -164,6 +164,7 @@ export async function POST(req: NextRequest) {
     const nivel = typeof body.nivel === "string" ? body.nivel.trim() : "inicial";
     const modalidad = typeof body.modalidad === "string" ? body.modalidad.trim() : "virtual";
     const categoria = typeof body.categoria === "string" ? body.categoria.trim() : "";
+    const imagen = typeof body.imagen === "string" ? body.imagen.trim() : "";
     const precio = typeof body.precio === "number" ? body.precio : 0;
     const estado = typeof body.estado === "string" ? body.estado.trim() : "en_desarrollo";
 
@@ -177,7 +178,19 @@ export async function POST(req: NextRequest) {
       .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
       .slice(0, 64);
     const id = idBase || `curso-${Date.now()}`;
-    const insertPayload: any = { id, titulo, descripcion: descripcion || null, duracion: duracion || null, nivel: nivel || null, orden: 0, modalidad: modalidad || 'virtual', categoria: categoria || null, precio: precio || 0, estado: estado || 'en_desarrollo' };
+    const insertPayload: any = { 
+      id, 
+      titulo, 
+      descripcion: descripcion || null, 
+      duracion: duracion || null, 
+      nivel: nivel || null, 
+      orden: 0, 
+      modalidad: modalidad || 'virtual', 
+      categoria: categoria || null, 
+      imagen: imagen || null,
+      precio: precio || 0, 
+      estado: estado || 'en_desarrollo' 
+    };
     const { data, error } = await supabase
       .from("cursos")
       .insert(insertPayload)
@@ -218,7 +231,7 @@ export async function PUT(req: NextRequest) {
   }
   try {
     const body = await req.json().catch(() => ({}));
-    const { id, titulo, descripcion, duracion, modalidad, categoria, nivel, precio, estado, orden, profesor, meses } = body;
+    const { id, titulo, descripcion, duracion, modalidad, categoria, nivel, precio, estado, orden, profesor, meses, imagen } = body;
     
     if (!id) {
       return NextResponse.json({ ok: false, error: "ID requerido" }, { status: 400 });
@@ -237,6 +250,7 @@ export async function PUT(req: NextRequest) {
     if (orden !== undefined) updatePayload.orden = orden;
     if (profesor !== undefined) updatePayload.profesor = profesor;
     if (meses !== undefined) updatePayload.meses = meses;
+    if (imagen !== undefined) updatePayload.imagen = imagen;
     
     const { data, error } = await supabase
       .from("cursos")
@@ -366,16 +380,25 @@ export async function DELETE(req: NextRequest) {
     }
 
     // 4. Borrar el curso
-    const { error } = await supabase
-      .from("cursos")
-      .delete()
-      .eq("id", id);
-      
-    if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
-    }
-    
-    return NextResponse.json({ ok: true });
+            console.log(`[DELETE] Intentando borrar curso con ID: "${id}"`);
+            const { data: deleted, error } = await supabase
+              .from("cursos")
+              .delete()
+              .eq("id", id)
+              .select();
+            
+            if (error) {
+              console.error("[DELETE] Error al borrar curso:", error);
+              return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+            }
+
+            if (!deleted || deleted.length === 0) {
+              console.warn(`[DELETE] No se borró ningún registro para ID: "${id}"`);
+              return NextResponse.json({ ok: false, error: "No se encontró el curso o no se pudo eliminar." }, { status: 404 });
+            }
+            
+            console.log(`[DELETE] Curso borrado exitosamente:`, deleted);
+            return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || "Error" }, { status: 500 });
   }

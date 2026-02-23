@@ -231,11 +231,21 @@ export default function AdminClasesGrabadasClient() {
       let transcripcionTexto = '';
       let transcripcionSrt = '';
       if (transcripcionFile) {
-        const text = await transcripcionFile.text();
-        if (text.includes("-->") && /\d{2}:\d{2}:\d{2}/.test(text)) {
-          transcripcionSrt = text;
-        } else {
-          transcripcionTexto = text;
+        try {
+          const text = await transcripcionFile.text();
+          if (!text || text.trim().length === 0) {
+            alert("⚠️ El archivo de transcripción está vacío. Se guardará la clase sin transcripción.");
+          } else {
+            console.log("Transcripción leída, longitud:", text.length);
+            if (text.includes("-->") && /\d{2}:\d{2}:\d{2}/.test(text)) {
+              transcripcionSrt = text;
+            } else {
+              transcripcionTexto = text;
+            }
+          }
+        } catch (err) {
+          console.error("Error leyendo archivo de transcripción:", err);
+          alert("⚠️ Error al leer el archivo de transcripción. Verifique el formato.");
         }
       }
 
@@ -425,12 +435,19 @@ export default function AdminClasesGrabadasClient() {
               
               <div>
                 <label className="block text-sm font-medium mb-1">Transcripción (opcional)</label>
-                <input
-                  type="file"
-                  accept=".txt,.srt"
-                  onChange={(e) => setTranscripcionFile(e.target.files?.[0] || null)}
-                  className="w-full p-2 border rounded-md"
-                />
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="file"
+                    accept=".txt,.srt"
+                    onChange={(e) => setTranscripcionFile(e.target.files?.[0] || null)}
+                    className="w-full p-2 border rounded-md"
+                  />
+                  {transcripcionFile && (
+                    <div className="text-xs text-green-600 bg-green-50 p-2 rounded border border-green-200">
+                      Archivo seleccionado: <strong>{transcripcionFile.name}</strong> ({Math.round(transcripcionFile.size / 1024)} KB)
+                    </div>
+                  )}
+                </div>
               </div>
               
               <button

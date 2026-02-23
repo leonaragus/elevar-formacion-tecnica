@@ -4,9 +4,19 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 
 function parsearTiempoSrt(tiempo: string): number {
-  const [tiempoParte] = tiempo.split(',');
-  const [horas, minutos, segundos] = tiempoParte.split(':').map(Number);
-  return horas * 3600 + minutos * 60 + segundos;
+  if (!tiempo) return 0;
+  // Eliminar milisegundos (separados por , o .)
+  const tiempoLimpio = tiempo.replace(/[,.]\d+$/, '');
+  const partes = tiempoLimpio.split(':').map(part => parseInt(part, 10));
+  
+  if (partes.length === 3) {
+    const [horas, minutos, segundos] = partes;
+    return (horas || 0) * 3600 + (minutos || 0) * 60 + (segundos || 0);
+  } else if (partes.length === 2) {
+    const [minutos, segundos] = partes;
+    return (minutos || 0) * 60 + (segundos || 0);
+  }
+  return 0;
 }
 
 interface TranscripcionItem {
@@ -15,28 +25,40 @@ interface TranscripcionItem {
 }
 
 function parsearSrt(srt: string): TranscripcionItem[] {
-  const lineas = srt.trim().split('\n');
+  if (!srt) return [];
+  // Normalizar saltos de línea: convertir todo a \n
+  const contenido = srt.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  
+  // Dividir por doble salto de línea (bloques estándar)
+  // Algunos SRT mal formados pueden tener más saltos, así que usamos regex
+  const bloques = contenido.split(/\n\s*\n/);
+  
   const items: TranscripcionItem[] = [];
   
-  for (let i = 0; i < lineas.length; i++) {
-    if (lineas[i].match(/^\d+$/)) {
-      const tiempoLinea = lineas[i + 1];
-      const textoLineas = [];
+  for (const bloque of bloques) {
+    const lineas = bloque.trim().split('\n');
+    if (lineas.length >= 2) {
+      // Buscar la línea de tiempo (contiene "-->")
+      const lineaTiempoIndex = lineas.findIndex(l => l.includes('-->'));
       
-      i += 2;
-      while (i < lineas.length && lineas[i].trim() !== '') {
-        textoLineas.push(lineas[i]);
-        i++;
-      }
-      
-      if (tiempoLinea && textoLineas.length > 0) {
-        const [inicio] = tiempoLinea.split(' --> ');
-        const tiempo = parsearTiempoSrt(inicio);
+      if (lineaTiempoIndex !== -1) {
+        const tiempoLinea = lineas[lineaTiempoIndex];
+        const textoLineas = lineas.slice(lineaTiempoIndex + 1);
         
-        items.push({
-          tiempo,
-          texto: textoLineas.join(' ')
-        });
+        if (tiempoLinea && textoLineas.length > 0) {
+          const [inicio] = tiempoLinea.split(' --> ');
+          const tiempo = parsearTiempoSrt(inicio);
+          
+          // Unir líneas de texto y limpiar etiquetas HTML si las hubiera (ej: <i>)
+          const texto = textoLineas.join(' ').replace(/<[^>]*>/g, '');
+          
+          if (texto.trim()) {
+            items.push({
+              tiempo,
+              texto: texto.trim()
+            });
+          }
+        }
       }
     }
   }
@@ -45,8 +67,20 @@ function parsearSrt(srt: string): TranscripcionItem[] {
 }
 
 function parsearTexto(texto: string): TranscripcionItem[] {
-  const oraciones = texto.split(/[.!?]+/).filter(s => s.trim().length > 0);
-  const duracionEstimada = 600;
+  // Primero intentamos por oraciones
+  let oraciones = texto.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  
+  // Si no hay oraciones (quizás no tiene puntuación), intentamos por saltos de línea
+  if (oraciones.length === 0) {
+    oraciones = texto.split(/\n+/).filter(s => s.trim().length > 0);
+  }
+
+  // Si aún así no hay nada, pero hay texto, usamos todo el texto como un bloque
+  if (oraciones.length === 0 && texto.trim().length > 0) {
+    oraciones = [texto.trim()];
+  }
+
+  const duracionEstimada = 600; // 10 minutos por defecto si no hay timestamps
   const tiempoPorOracion = oraciones.length > 0 ? duracionEstimada / oraciones.length : 0;
   
   return oraciones.map((oracion, index) => ({

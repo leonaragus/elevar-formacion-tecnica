@@ -14,7 +14,8 @@ import Link from "next/link";
    nivel: "inicial" | "intermedio" | "avanzado" | "especializacion";
    precio: number;
    estado: "activo" | "inactivo" | "en_desarrollo" | "suspendido";
-   created_at: string;
+  imagen: string | null;
+  created_at: string;
    updated_at: string;
  };
  
@@ -63,76 +64,113 @@ import Link from "next/link";
   const [newPrecio, setNewPrecio] = useState<number>(0);
   const [newPrecioText, setNewPrecioText] = useState<string>("0");
    const [newEstado, setNewEstado] = useState<"activo" | "inactivo" | "en_desarrollo" | "suspendido">("en_desarrollo");
-   const [saving, setSaving] = useState(false);
+  const [newImagen, setNewImagen] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoadError(null);
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    
+    try {
+      setUploadingImage(true);
+      
+      const formData = new FormData();
+      formData.append("file", file);
 
-        const authResult = (await Promise.race([
-          supabase.auth.getUser(),
-          new Promise((resolve) =>
-            setTimeout(
-              () => resolve({ data: { user: null }, error: { message: "timeout" } }),
-              5000
-            )
-          ),
-        ])) as any;
+      const res = await fetch("/api/admin/upload-image", {
+        method: "POST",
+        body: formData,
+      });
 
-        const userData = authResult?.data?.user ?? null;
-        const userError = authResult?.error ?? null;
-        if (!userError || userError?.message === "timeout") {
-          setUser(userData);
-        } else {
-          setUser(null);
-        }
+      const json = await res.json().catch(() => null);
 
-        const controllerCursos = new AbortController();
-        const cursosTimeout = setTimeout(() => controllerCursos.abort(), 15000);
-        const res = await fetch(`/api/admin/cursos`, { cache: "no-store", signal: controllerCursos.signal });
-        clearTimeout(cursosTimeout);
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "Error al subir imagen");
+      }
 
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(`Error ${res.status}: ${res.statusText} - ${errorText}`);
-        }
+      setNewImagen(json.url);
+    } catch (error: any) {
+      console.error("Error upload:", error);
+      alert('Error al subir imagen: ' + (error.message || "Error desconocido"));
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
-        const json = await res.json();
-        if (!json.ok) {
-          throw new Error(json.error || "Error desconocido en cursos");
-        }
+  const loadCursos = async () => {
+    try {
+      setLoadError(null);
+      setLoading(true);
 
-        setCursos(Array.isArray(json?.cursos) ? json.cursos : []);
-        setAlumnos(Array.isArray(json?.alumnos) ? json.alumnos : []);
+      const authResult = (await Promise.race([
+        supabase.auth.getUser(),
+        new Promise((resolve) =>
+          setTimeout(
+            () => resolve({ data: { user: null }, error: { message: "timeout" } }),
+            5000
+          )
+        ),
+      ])) as any;
 
-        const controllerPend = new AbortController();
-        const pendTimeout = setTimeout(() => controllerPend.abort(), 15000);
-        const resPend = await fetch(`/api/admin/inscripciones`, { cache: "no-store", signal: controllerPend.signal });
-        clearTimeout(pendTimeout);
+      const userData = authResult?.data?.user ?? null;
+      const userError = authResult?.error ?? null;
+      if (!userError || userError?.message === "timeout") {
+        setUser(userData);
+      } else {
+        setUser(null);
+      }
 
-        if (!resPend.ok) {
-          setPendientes([]);
-          return;
-        }
+      const controllerCursos = new AbortController();
+      const cursosTimeout = setTimeout(() => controllerCursos.abort(), 15000);
+      const res = await fetch(`/api/admin/cursos?t=${Date.now()}`, { cache: "no-store", signal: controllerCursos.signal });
+      clearTimeout(cursosTimeout);
 
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Error ${res.status}: ${res.statusText} - ${errorText}`);
+      }
+
+      const json = await res.json();
+      if (!json.ok) {
+        throw new Error(json.error || "Error desconocido en cursos");
+      }
+
+      setCursos(Array.isArray(json?.cursos) ? json.cursos : []);
+      setAlumnos(Array.isArray(json?.alumnos) ? json.alumnos : []);
+
+      const controllerPend = new AbortController();
+      const pendTimeout = setTimeout(() => controllerPend.abort(), 15000);
+      const resPend = await fetch(`/api/admin/inscripciones?t=${Date.now()}`, { cache: "no-store", signal: controllerPend.signal });
+      clearTimeout(pendTimeout);
+
+      if (!resPend.ok) {
+        const errText = await resPend.text().catch(() => "Error desconocido");
+        console.error("Error cargando pendientes:", resPend.status, errText);
+        setLoadError(`Error al cargar pendientes: ${resPend.status} - ${errText}`);
+        setPendientes([]);
+        // No retornamos aquí para que al menos se vean los cursos si cargaron bien
+      } else {
         const jsonPend = await resPend.json().catch(() => null as any);
         if (jsonPend) setDebugInfo(jsonPend.debug);
-        if (jsonPend && jsonPend.ok === false && jsonPend.error) {
-          setLoadError(`Advertencia: ${jsonPend.error}`);
-          setPendientes(Array.isArray(jsonPend?.pendientes) ? jsonPend.pendientes : []);
-          return;
+        
+        if (jsonPend && jsonPend.ok === false) {
+            setLoadError(`Error API Pendientes: ${jsonPend.error || "Desconocido"}`);
+            setPendientes([]);
+        } else {
+            setPendientes(Array.isArray(jsonPend?.pendientes) ? jsonPend.pendientes : []);
         }
-        setPendientes(Array.isArray(jsonPend?.pendientes) ? jsonPend.pendientes : []);
-      } catch (error: any) {
-        setLoadError(`Error al cargar datos: ${error?.message || "Error desconocido"}`);
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (error: any) {
+      setLoadError(`Error al cargar datos: ${error?.message || "Error desconocido"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchData();
+  useEffect(() => {
+    loadCursos();
   }, [supabase]);
 
   const forceReload = async () => {
@@ -265,6 +303,7 @@ import Link from "next/link";
            nivel: newNivel,
             precio: precioFinal,
            estado: newEstado,
+           imagen: newImagen,
        };
        if (editingId) body.id = editingId;
 
@@ -284,21 +323,18 @@ import Link from "next/link";
        setNewDescripcion("");
        setNewDuracion("");
        setNewCategoria("");
-      setNewPrecio(0);
-      setNewPrecioText("0");
+       setNewPrecio(0);
+       setNewPrecioText("0");
+       setNewImagen("");
        // Refresh
-       setLoading(true);
-       const res2 = await fetch(`/api/admin/cursos`, { cache: "no-store" }).catch(() => null as any);
-       const json2 = await res2?.json().catch(() => null as any);
-       setCursos(Array.isArray(json2?.cursos) ? json2.cursos : []);
-       setAlumnos(Array.isArray(json2?.alumnos) ? json2.alumnos : []);
-     } catch (e) {
-       alert("Error al guardar curso");
-     } finally {
-       setSaving(false);
-       setLoading(false);
-     }
-   };
+       await loadCursos();
+    } catch (e) {
+      alert("Error al guardar curso");
+    } finally {
+      setSaving(false);
+      setLoading(false);
+    }
+  };
 
    const startEdit = (curso: CursoRow) => {
       setEditingId(curso.id);
@@ -311,23 +347,31 @@ import Link from "next/link";
       setNewPrecio(curso.precio);
       setNewPrecioText(curso.precio != null ? curso.precio.toLocaleString('es-AR') : "0");
       setNewEstado(curso.estado as any);
+      setNewImagen(curso.imagen || "");
       setShowNew(true);
    };
 
    const deleteCourse = async (id: string) => {
-      if (!confirm("¿Eliminar este curso?")) return;
-      try {
-          const res = await fetch(`/api/admin/cursos?id=${id}`, { method: "DELETE" });
+    if (!confirm("¿Eliminar este curso?")) return;
+    try {
+      const res = await fetch(`/api/admin/cursos?id=${id}&t=${Date.now()}`, { 
+        method: "DELETE",
+        cache: "no-store"
+      });
       if (res.ok) {
-          setCursos(prev => prev.filter(c => c.id !== id));
+        setCursos(prev => prev.filter(c => c.id !== id));
+        // Recargar desde el servidor para asegurar persistencia
+        await loadCursos();
       } else {
-          const json = await res.json().catch(() => null);
-          alert(`Error al eliminar: ${json?.error || "Error desconocido"}`);
+        const json = await res.json().catch(() => null);
+        alert(`Error al eliminar: ${json?.error || "Error desconocido"}`);
+        // Recargar por si el estado local estaba desincronizado
+        await loadCursos();
       }
-  } catch {
-      alert("Error de red");
-  }
-   };
+    } catch (e: any) {
+      alert("Error de red: " + (e?.message || ""));
+    }
+  };
 
    const approvePending = async (user_id: string, curso_id: string) => {
      try {
@@ -575,6 +619,32 @@ import Link from "next/link";
                        <option value="suspendido">Suspendido</option>
                      </select>
                    </div>
+                   <div className="md:col-span-2">
+                    <label className="text-xs text-slate-400">Imagen de portada</label>
+                    <div className="flex items-center gap-4 mt-1">
+                      {newImagen && (
+                        <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-white/10">
+                          <img src={newImagen} alt="Portada" className="w-full h-full object-cover" />
+                          <button 
+                            onClick={() => setNewImagen("")}
+                            className="absolute top-0 right-0 p-1 bg-black/50 hover:bg-black/70 text-white rounded-bl-lg"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={handleImageUpload}
+                          disabled={uploadingImage}
+                          className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                        />
+                        {uploadingImage && <span className="text-xs text-blue-400 ml-2">Subiendo...</span>}
+                      </div>
+                    </div>
+                  </div>
                  </div>
                  <div className="mt-4 flex items-center gap-2">
                    <button onClick={saveNewCourse} disabled={saving} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50">

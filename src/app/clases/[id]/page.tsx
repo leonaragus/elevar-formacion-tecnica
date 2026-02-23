@@ -163,13 +163,14 @@ export default async function VerClaseAlumnoPage({ params }: PageProps) {
             </div>
             <div>
               <h3 className="font-medium text-gray-700 mb-2">Transcripción</h3>
-              {clase.tiene_transcripcion ? (
+              {(clase.tiene_transcripcion || (clase.transcripcion_texto && clase.transcripcion_texto.length > 0) || (clase.transcripcion_srt && clase.transcripcion_srt.length > 0)) ? (
                 <div className="text-sm text-green-600">
                   ✅ Disponible en el reproductor
                 </div>
               ) : (
                 <div className="text-sm text-gray-500">
                   ❌ No disponible
+                  {/* Debug info: tiene={String(clase.tiene_transcripcion)}, txtLen={clase.transcripcion_texto?.length}, srtLen={clase.transcripcion_srt?.length} */}
                 </div>
               )}
             </div>

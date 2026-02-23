@@ -29,16 +29,16 @@ export async function POST(request: NextRequest) {
       bucket
     } = body;
 
+    console.log(`[FinalizeUpload] Recibido: cursoId=${cursoId}, titulo=${titulo}, txtLen=${transcripcionTexto?.length}, srtLen=${transcripcionSrt?.length}`);
+
+
     if (!cursoId || !videoPath) {
       return NextResponse.json({ error: 'Faltan datos requeridos' }, { status: 400 });
     }
 
-    // Validate UUID format for cursoId to provide friendly error
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(cursoId)) {
-       console.error('Invalid cursoId format:', cursoId);
-       return NextResponse.json({ error: `El ID del curso no es válido para la base de datos (se espera UUID, se recibió: "${cursoId}"). Verifica que el curso seleccionado sea correcto.` }, { status: 400 });
-    }
+    // UUID validation removed to support slug IDs
+    // const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    // if (!uuidRegex.test(cursoId)) { ... }
 
     const supabase = createSupabaseAdminClient();
 
@@ -60,6 +60,9 @@ export async function POST(request: NextRequest) {
     let duracionMin = duracion ? parseInt(duracion) : 0;
     if (isNaN(duracionMin)) duracionMin = 0;
 
+    // Calcular tiene_transcripcion de forma robusta
+    const tieneTranscripcion = Boolean((transcripcionTexto && transcripcionTexto.trim().length > 0) || (transcripcionSrt && transcripcionSrt.trim().length > 0));
+
     let { data: insertData, error: insertError } = await supabase
       .from('clases_grabadas')
       .insert({
@@ -70,7 +73,7 @@ export async function POST(request: NextRequest) {
         duracion_minutos: duracionMin,
         transcripcion_texto: transcripcionTexto || null,
         transcripcion_srt: transcripcionSrt || null,
-        tiene_transcripcion: Boolean(transcripcionTexto || transcripcionSrt),
+        tiene_transcripcion: tieneTranscripcion,
         orden: 1,
         es_activo: true,
         activo: true,

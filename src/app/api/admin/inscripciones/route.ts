@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { devInscripciones, upsertInscripcion, deleteInscripcion, devPerfiles, devIntereses } from "@/lib/devstore";
 
 async function isAuthorized(req: NextRequest) {
   const token = req.headers.get("x-admin-token") || req.headers.get("X-Admin-Token");
@@ -17,7 +16,8 @@ async function isAuthorized(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     // Solo permitir si hay sesión activa (admin gestiona desde el panel)
     return !!user;
-  } catch {
+  } catch (e) {
+    console.error("Error checking auth session:", e);
     // ignore, continue to dev fallback
   }
   return false;
@@ -28,8 +28,6 @@ async function resolveUserIdFromEmail(supabase: ReturnType<typeof createSupabase
   if (!normalized || !normalized.includes("@")) return null;
 
   // 1. Try to find existing user by email
-  // We'll use a larger perPage and potentially loop if needed, 
-  // but for now 1000 should be enough for most cases.
   const { data: { users }, error: listError } = await supabase.auth.admin.listUsers({
     perPage: 1000
   });
@@ -48,9 +46,6 @@ async function resolveUserIdFromEmail(supabase: ReturnType<typeof createSupabase
 
   if (created?.user?.id) return created.user.id;
 
-  // 3. If creation failed, it might be because the user already exists but was not in the first 1000.
-  // We can try to list again with a different page if we suspect there are more than 1000 users.
-  // For now, let's just log the error.
   if (createError) {
     console.error(`Error creating user ${normalized}:`, createError);
   }
@@ -62,17 +57,35 @@ export async function GET(req: NextRequest) {
   if (!(await isAuthorized(req))) {
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
+  
+  // Debug info container
+  const debugInfo: any = {
+    hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    interesesCount: 0,
+    cursosAlumnosCount: 0
+  };
+
   try {
     const supabase = createSupabaseAdminClient();
     
     // 1. Cursos Alumnos Pendientes
+    console.log("[GET /api/admin/inscripciones] Consultando cursos_alumnos pendiente...");
     const { data: cursosAlumnos, error: caErr } = await supabase
       .from("cursos_alumnos")
       .select("user_id, curso_id, estado, created_at")
       .eq("estado", "pendiente")
       .limit(200);
 
+    if (caErr) {
+        console.error("[GET /api/admin/inscripciones] Error cursos_alumnos:", caErr);
+        debugInfo.cursosAlumnosError = caErr.message;
+    } else {
+        console.log(`[GET /api/admin/inscripciones] Encontrados ${cursosAlumnos?.length || 0} pendientes en cursos_alumnos`);
+        debugInfo.cursosAlumnosCount = cursosAlumnos?.length || 0;
+    }
+
     // 2. Intereses (solicitudes por email)
+    console.log("[GET /api/admin/inscripciones] Consultando intereses...");
     const { data: intereses, error: intErr } = await supabase
       .from("intereses")
       .select("email, course_id, created_at")
@@ -80,6 +93,9 @@ export async function GET(req: NextRequest) {
 
     if (intErr) {
       console.error("Error fetching intereses:", intErr);
+      debugInfo.interesesError = intErr.message;
+    } else {
+        debugInfo.interesesCount = intereses?.length || 0;
     }
 
     type PendingInscripcion = {
@@ -90,6 +106,8 @@ export async function GET(req: NextRequest) {
       curso_titulo?: string | null;
       source?: string;
       created_at?: string;
+      nombre?: string;
+      apellido?: string;
     };
 
     let combined: PendingInscripcion[] = [];
@@ -119,14 +137,19 @@ export async function GET(req: NextRequest) {
 
     // Get User and Course info
     const userIds = unique.filter(item => !item.user_id.includes('@')).map(item => item.user_id);
-    const emails = unique.filter(item => item.user_id.includes('@')).map(item => item.user_id);
     const courseIds = unique.map(item => item.curso_id);
 
     let userInfo: Record<string, any> = {};
     let courseInfo: Record<string, any> = {};
 
     if (userIds.length > 0) {
-      const { data: users } = await supabase.auth.admin.listUsers();
+      // Usar pagina grande para traer más usuarios
+      const { data: users, error: usersError } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      if (usersError) {
+          console.error("Error listing users:", usersError);
+          debugInfo.usersError = usersError.message;
+      }
+      
       if (users) {
         users.forEach(u => {
           if (userIds.includes(u.id)) {
@@ -137,6 +160,21 @@ export async function GET(req: NextRequest) {
             };
           }
         });
+      }
+      
+      // Intentar recuperar usuarios individuales que no vinieron en la lista (si hay paginación y quedaron fuera)
+      const missingIds = userIds.filter(id => !userInfo[id]);
+      if (missingIds.length > 0 && missingIds.length < 10) { // Solo si son pocos para no saturar
+          for (const id of missingIds) {
+              const { data: uRes } = await supabase.auth.admin.getUserById(id);
+              if (uRes?.user) {
+                  userInfo[id] = {
+                      email: uRes.user.email,
+                      nombre: uRes.user.user_metadata?.nombre || "",
+                      apellido: uRes.user.user_metadata?.apellido || ""
+                  };
+              }
+          }
       }
     }
 
@@ -149,10 +187,11 @@ export async function GET(req: NextRequest) {
 
     const enriched = unique.map(item => {
       const isEmail = item.user_id.includes('@');
-      const email = isEmail ? item.user_id : (userInfo[item.user_id]?.email || item.user_id);
+      const info = userInfo[item.user_id];
       
-      const nombre = isEmail ? "" : (userInfo[item.user_id]?.nombre || "");
-      const apellido = isEmail ? "" : (userInfo[item.user_id]?.apellido || "");
+      const email = isEmail ? item.user_id : (info?.email || `ID: ${item.user_id.substring(0,8)}...`);
+      const nombre = isEmail ? "" : (info?.nombre || "Usuario");
+      const apellido = isEmail ? "" : (info?.apellido || "Desconocido");
       
       return {
         ...item,
@@ -169,10 +208,10 @@ export async function GET(req: NextRequest) {
       return tb - ta;
     });
 
-    return NextResponse.json({ ok: true, pendientes: sorted });
+    return NextResponse.json({ ok: true, pendientes: sorted, debug: debugInfo });
   } catch (e: any) {
     console.error("Error in Admin Inscriptions GET:", e);
-    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e.message, debug: debugInfo }, { status: 500 });
   }
 }
 
