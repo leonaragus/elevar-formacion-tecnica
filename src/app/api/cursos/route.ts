@@ -1,4 +1,4 @@
-'''
+
 // src/app/api/cursos/route.ts
 // This is the secure server-side "butler" that prepares course data.
 import { NextResponse } from 'next/server';
@@ -66,5 +66,3 @@ export async function GET() {
     return NextResponse.json({ error: 'Failed to fetch course data' }, { status: 500 });
   }
 }
-
-'''

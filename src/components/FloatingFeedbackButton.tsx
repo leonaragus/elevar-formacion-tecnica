@@ -1,4 +1,4 @@
-'''"use client";
+"use client";
 
 import { useState } from 'react';
 import { MessageSquare, Star } from 'lucide-react';
@@ -70,4 +70,3 @@ export default function FloatingFeedbackButton({ cursoId, claseId }: { cursoId: 
     </div>
   );
 }
-'''

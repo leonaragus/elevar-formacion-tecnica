@@ -1,4 +1,4 @@
-'''"use client";
+"use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import CommentInput from "./CommentInput"; // Importamos el nuevo componente
@@ -107,4 +107,3 @@ export default function CommentsCourseSummary({ cursoId, claseId }: { cursoId: s
     </div>
   );
 }
-'''
