@@ -1,6 +1,7 @@
 
 // src/app/api/cursos/route.ts
 // This is the secure server-side "butler" that prepares course data.
+// CACHE-BUSTER: 1
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
