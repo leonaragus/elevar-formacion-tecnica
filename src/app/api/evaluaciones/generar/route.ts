@@ -45,10 +45,19 @@ export async function POST(req: NextRequest) {
     // 2. Extraer texto del PDF
     let pdfText = "";
     try {
-      // Intentar cargar pdf-parse de forma dinámica para evitar problemas de empaquetado
+      // **FIX**: Cargar 'pdf-parse' de una manera que sea robusta en diferentes entornos (local vs. Vercel).
+      // El entorno de compilación de Vercel puede empaquetar los módulos de CommonJS de forma inesperada.
       const pdfParseModule = await import("pdf-parse");
-      // Manejar tanto la exportación por defecto como la nombrada, por compatibilidad
+
+      // La función real podría estar en .default (estándar) o anidada (error de empaquetado común).
       const PDFParse = pdfParseModule.default || pdfParseModule;
+
+      if (typeof PDFParse !== 'function') {
+        // Si después de todos los intentos no es una función, lanza un error claro.
+        // Esto ayudará a depurar en Vercel en lugar de obtener "is not callable".
+        console.error("pdf-parse no se cargó como una función. Módulo recibido:", pdfParseModule);
+        throw new Error("Error interno: La librería para procesar PDFs no se cargó correctamente.");
+      }
       
       const data = await PDFParse(buffer);
       pdfText = data.text;
@@ -56,11 +65,9 @@ export async function POST(req: NextRequest) {
       console.error("Error al leer PDF con pdf-parse:", error);
       
       // Fallback simple: intentar extraer strings legibles del buffer si falla el parser
-      // Esto ayuda con algunos PDFs mal formados o versiones nuevas no soportadas
       try {
         const raw = buffer.toString('latin1');
-        // Buscar patrones de texto entre paréntesis (formato PDF básico)
-        const matches = raw.match(/\((.*?)\)/g);
+        const matches = raw.match(/\\((.*?)\\)/g);
         if (matches && matches.length > 20) {
             pdfText = matches.map(m => m.slice(1, -1)).join(" ");
         }
@@ -94,9 +101,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Limpieza básica de texto extraído
-    pdfText = pdfText.replace(/\s+/g, " ").trim();
+    pdfText = pdfText.replace(/\\s+/g, " ").trim();
 
-    // Validar longitud del texto (Modo permisivo: > 20 caracteres)
+    // Validar longitud del texto
     if (pdfText.length < 20) {
       return NextResponse.json(
         { error: "El PDF no contiene suficiente texto legible (posiblemente escaneado)." },
@@ -107,7 +114,7 @@ export async function POST(req: NextRequest) {
     // Recortar texto si es muy largo
     const truncatedText = pdfText.slice(0, 30000);
 
-    // 3. Generar preguntas sin usar servicios de pago (modo gratuito)
+    // 3. Generar preguntas
     const exam = generateHeuristicExam(truncatedText, 15);
     return NextResponse.json(exam);
 
@@ -131,21 +138,21 @@ const STOPWORDS = new Set([
 function normalizeWord(w: string) {
   return w
     .toLowerCase()
-    .replace(/[.,;:¡!¿?()\"'`]/g, "")
-    .replace(/\d+/g, "")
+    .replace(/[.,;:¡!¿?()\\\"\'\`]/g, "")
+    .replace(/\\d+/g, "")
     .trim();
 }
 
 function tokenize(text: string): string[] {
   return text
-    .split(/\s+/)
+    .split(/\\s+/)
     .map(normalizeWord)
     .filter((w) => w.length > 3 && !STOPWORDS.has(w));
 }
 
 function splitSentences(text: string): string[] {
   return text
-    .split(/[\.\!\?\n]+/)
+    .split(/[\\.\\!\\?\\n]+/)
     .map((s) => s.trim())
     .filter((s) => s.length >= 30);
 }
@@ -201,7 +208,7 @@ function generateHeuristicExam(text: string, count = 15): Exam {
 
     questions.push({
       id: qid++,
-      question: `Complete la oración: "${blanked}"`,
+      question: `Complete la oración: \"${blanked}\"`,
       options,
       correctAnswer: Math.max(0, correctIndex),
     });
