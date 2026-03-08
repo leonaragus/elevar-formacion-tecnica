@@ -1,7 +1,7 @@
-'''"use client";
+"use client";
 
 import { useState } from 'react';
-import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { createSupabaseBrowserClient } from '../lib/supabase/client';
 
 function Avatar({ text }: { text: string }) {
   const initial = (text || "A").charAt(0).toUpperCase();
@@ -44,7 +44,7 @@ export default function CommentInput({
         texto: text,
         author_email: authorEmail,
         created_at: new Date().toISOString(),
-        isOptimistic: true, // Flag to show it's temporary
+        isOptimistic: true,
       };
 
       onCommentAdded(optimisticItem);
@@ -56,11 +56,18 @@ export default function CommentInput({
         body: JSON.stringify({ clase_id: claseId, texto: text }),
       });
 
-      const result = await res.json();
-
-      if (!result.ok) {
-        setError(result.error || 'No se pudo enviar el comentario.');
-        // Here you might want to remove the optimistic item
+      if (!res.ok) {
+        let errorMsg = 'No se pudo enviar el comentario.';
+        try {
+            const result = await res.json();
+            if (result.error) {
+                errorMsg = result.error;
+            }
+        } catch(e) {
+            console.error("No se pudo parsear la respuesta de error:", e);
+        }
+        setError(errorMsg);
+        // Aquí se podría implementar la lógica para revertir el comentario optimista
       }
     } catch (e: any) {
       setError('Error de conexión. Inténtalo de nuevo.');
@@ -95,4 +102,3 @@ export default function CommentInput({
     </form>
   );
 }
-'''
