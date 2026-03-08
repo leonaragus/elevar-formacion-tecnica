@@ -299,7 +299,6 @@ export default async function MisClasesPage(props: PageProps) {
                   )}
                 </div>
 
-                {/* CORRECTED: Added the required 'claseId' prop */}
                 <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl shadow-sm p-6 hidden md:block">
                   <CommentsCourseSummary cursoId={String(cursoId)} claseId={String(claseSeleccionada.id)} />
                 </div>
