@@ -37,25 +37,20 @@ async function resolvePublicUrls(
   async function getWorkingUrl(path: string) {
     if (!path) return null;
 
-    // Prioritize signed URLs for known private buckets
-    // This avoids issues where public URL HEAD check fails but signed URL works
     const privateBuckets = ['videos', 'clases-grabadas']; 
     for (const b of privateBuckets) {
        try {
         const { data: signedData } = await supabase.storage.from(b).createSignedUrl(path, 60 * 60 * 24);
         if (signedData?.signedUrl) {
-            // Optimistically return signed URL if it looks valid, verifying with HEAD
             if (await urlOk(signedData.signedUrl)) return signedData.signedUrl;
         }
       } catch {}
     }
 
     for (const b of bucketPriority) {
-      // 1. Try public URL
       const { data: publicData } = supabase.storage.from(b).getPublicUrl(path);
       if (await urlOk(publicData.publicUrl)) return publicData.publicUrl;
       
-      // 2. Try signed URL (valid for 24h) if public failed (e.g. private bucket)
       try {
         const { data: signedData } = await supabase.storage.from(b).createSignedUrl(path, 60 * 60 * 24);
         if (signedData?.signedUrl && await urlOk(signedData.signedUrl)) return signedData.signedUrl;
@@ -98,7 +93,6 @@ export default async function MisClasesPage(props: PageProps) {
   const supabase = await createSupabaseServerClient();
   const cookieStore = await cookies();
 
-  // Obtener usuario actual o sesión de alumno por cookie
   const { data: authData } = await supabase.auth.getUser();
   const user = authData?.user;
   
@@ -106,25 +100,12 @@ export default async function MisClasesPage(props: PageProps) {
   const studentOk = cookieStore.get("student_ok")?.value === "1";
   const studentCourseId = cookieStore.get("student_course_id")?.value;
 
-  console.log('DEBUG MisClasesPage:', { 
-    userId: user?.id, 
-    studentEmail, 
-    studentOk, 
-    studentCourseId,
-    searchParamsCursoId: searchParams?.curso_id
-  });
-
   if (!user && !studentOk) {
-    console.log('DEBUG: Ni usuario Auth ni cookie studentOk. Redirigiendo a notFound.');
     notFound();
   }
   
-  // Si hay searchParams.curso_id, lo usamos. Si no, y es alumno por cookie, usamos studentCourseId.
   const cursoId = searchParams?.curso_id || (studentOk ? studentCourseId : undefined);
 
-  console.log('DEBUG: cursoId resuelto:', cursoId);
-
-  // Si no hay curso seleccionado, mostrar cursos disponibles
   if (!cursoId) {
     let cursosInscritos: any[] = [];
     const adminSupabase = createSupabaseServiceRoleClient();
@@ -140,7 +121,6 @@ export default async function MisClasesPage(props: PageProps) {
         .eq('estado', 'activo');
       cursosInscritos = data || [];
     } else if (studentOk && studentCourseId) {
-       // Si es alumno por cookie, ya tenemos su curso
        const { data: curso } = await adminSupabase
          .from('cursos')
          .select('titulo, id')
@@ -208,86 +188,36 @@ export default async function MisClasesPage(props: PageProps) {
     );
   }
 
-  // Si hay curso seleccionado, mostrar clases grabadas
-  // Usamos el cliente de service role para saltar RLS ya que hemos validado la inscripción manualmente
   const adminSupabase = createSupabaseServiceRoleClient();
   
-  // 1. Verificar que el alumno esté inscrito en este curso
   let isEnrolled = false;
-  console.log('DEBUG: Iniciando verificación de inscripción para curso:', cursoId);
   
   if (user) {
-    console.log('DEBUG: Verificando para usuario autenticado:', user.id);
-    const { data: insc, error: inscError } = await adminSupabase
+    const { data: insc } = await adminSupabase
       .from('cursos_alumnos')
-      .select('id, estado, user_id, curso_id')
+      .select('id')
       .eq('user_id', user.id)
       .eq('curso_id', String(cursoId))
       .eq('estado', 'activo')
       .maybeSingle();
-    
     if (insc) {
-      console.log('DEBUG: Inscripción encontrada:', insc);
       isEnrolled = true;
-    } else {
-      console.log('DEBUG: No se encontró inscripción activa. Error:', inscError);
-      // Fallback: buscar por email si el user_id no coincide (por si hay perfiles duplicados o discrepancias)
-      const { data: profile } = await adminSupabase
-        .from('profiles')
-        .select('id')
-        .eq('email', user.email)
-        .maybeSingle();
-      
-      if (profile && profile.id !== user.id) {
-        console.log('DEBUG: Probando con profile.id alternativo:', profile.id);
-        const { data: inscAlt } = await adminSupabase
-          .from('cursos_alumnos')
-          .select('id')
-          .eq('user_id', profile.id)
-          .eq('curso_id', String(cursoId))
-          .eq('estado', 'activo')
-          .maybeSingle();
-        if (inscAlt) isEnrolled = true;
-      }
     }
   } else if (studentOk && String(studentCourseId) === String(cursoId)) {
-    console.log('DEBUG: Verificando para alumno por cookies legacy');
     isEnrolled = true;
   }
 
-  console.log('DEBUG: Inscripción verificada:', { isEnrolled, cursoId });
-
   if (!isEnrolled) {
-    console.log('DEBUG: Usuario no inscrito en este curso o inscripción no activa.');
     notFound();
   }
 
-  // 2. Obtener clases grabadas
-  console.log('DEBUG: Buscando clases para curso:', cursoId);
-  const { data: clases, error: clasesError } = await adminSupabase
+  const { data: clases } = await adminSupabase
     .from('clases_grabadas')
     .select('*')
     .eq('curso_id', cursoId)
     .eq('activo', true)
     .order('fecha_clase', { ascending: false });
 
-  console.log('DEBUG: Clases encontradas:', clases?.length || 0, 'Error:', clasesError);
-  
-  if (!clases || clases.length === 0) {
-      console.log('DEBUG: No active classes found. Checking if there are inactive ones...');
-      const { data: inactive } = await adminSupabase
-        .from('clases_grabadas')
-        .select('id, titulo, activo')
-        .eq('curso_id', cursoId)
-        .limit(5);
-      console.log('DEBUG: Inactive classes found (might explain why user sees nothing):', inactive);
-  }
-
-  if (clases && clases.length > 0) {
-    console.log('DEBUG: Primera clase:', { id: clases[0].id, titulo: clases[0].titulo });
-  }
-
-  // 3. Obtener clase seleccionada (si hay una en searchParams, o la primera)
   const claseIdParam = searchParams?.clase_id;
   const claseSeleccionada = clases?.find(c => String(c.id) === String(claseIdParam)) || (clases && clases.length > 0 ? clases[0] : null);
 
@@ -297,7 +227,6 @@ export default async function MisClasesPage(props: PageProps) {
      urls = await resolvePublicUrls(adminSupabase, claseSeleccionada);
   }
 
-  // 4. Obtener información del curso
   const { data: curso } = await adminSupabase
     .from('cursos')
     .select('titulo')
@@ -307,7 +236,6 @@ export default async function MisClasesPage(props: PageProps) {
   return (
     <div className="min-h-screen bg-gray-950 py-8">
       <div className="max-w-7xl mx-auto px-4">
-        {/* Encabezado */}
         <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-2">
@@ -328,11 +256,9 @@ export default async function MisClasesPage(props: PageProps) {
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Panel Principal: Video y Detalles */}
           <div className="lg:col-span-2 space-y-6">
             {claseSeleccionada ? (
               <>
-                {/* Reproductor de Video */}
                 <div className="bg-black rounded-xl shadow-2xl overflow-hidden aspect-video">
                   <VideoPlayer
                     videoUrl={urls.url1 || claseSeleccionada.video_public_url}
@@ -345,7 +271,6 @@ export default async function MisClasesPage(props: PageProps) {
                   />
                 </div>
 
-                {/* Info de la Clase */}
                 <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl shadow-sm p-6">
                   <h2 className="text-2xl font-bold text-white mb-2">
                     {claseSeleccionada.titulo}
@@ -374,12 +299,11 @@ export default async function MisClasesPage(props: PageProps) {
                   )}
                 </div>
 
-                {/* Sección de Comentarios (Legacy - se mantiene por compatibilidad visual, pero el botón flotante es el principal) */}
+                {/* CORRECTED: Added the required 'claseId' prop */}
                 <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl shadow-sm p-6 hidden md:block">
-                  <CommentsCourseSummary cursoId={String(cursoId)} />
+                  <CommentsCourseSummary cursoId={String(cursoId)} claseId={String(claseSeleccionada.id)} />
                 </div>
                 
-                {/* Botón Flotante de Feedback */}
                 <FloatingFeedbackButton cursoId={String(cursoId)} claseId={String(claseSeleccionada.id)} />
               </>
             ) : (
@@ -391,7 +315,6 @@ export default async function MisClasesPage(props: PageProps) {
             )}
           </div>
 
-          {/* Sidebar: Lista de Clases */}
           <div className="lg:col-span-1">
             <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl shadow-sm overflow-hidden sticky top-8">
               <div className="p-4 border-b border-gray-700 bg-gray-800">
