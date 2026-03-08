@@ -37,7 +37,7 @@ async function resolvePublicUrls(
   async function getWorkingUrl(path: string) {
     if (!path) return null;
 
-    const privateBuckets = ['videos', 'clases-grabadas']; 
+    const privateBuckets = ['videos', 'clases-grabadas'];
     for (const b of privateBuckets) {
        try {
         const { data: signedData } = await supabase.storage.from(b).createSignedUrl(path, 60 * 60 * 24);
