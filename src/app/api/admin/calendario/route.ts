@@ -121,7 +121,7 @@ export async function POST(request: Request) {
 // PUT /api/admin/calendario - Actualizar fecha de entrega
 export async function PUT(request: Request) {
   try {
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
     
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
@@ -131,7 +131,7 @@ export async function PUT(request: Request) {
 
     // Verificar que el usuario sea admin o profesor
     const { data: profile, error: profileError } = await supabase
-      .from('profiles')
+      .from('perfiles')
       .select('rol')
       .eq('id', user.id)
       .single();
@@ -172,7 +172,7 @@ export async function PUT(request: Request) {
 // DELETE /api/admin/calendario - Eliminar fecha de entrega
 export async function DELETE(request: Request) {
   try {
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
     
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
@@ -182,7 +182,7 @@ export async function DELETE(request: Request) {
 
     // Verificar que el usuario sea admin o profesor
     const { data: profile, error: profileError } = await supabase
-      .from('profiles')
+      .from('perfiles')
       .select('rol')
       .eq('id', user.id)
       .single();

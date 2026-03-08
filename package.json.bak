@@ -1,0 +1,45 @@
+{
+  "name": "supabase-next14",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Template Next.js 14+ + Supabase (@supabase/ssr)",
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint ."
+  },
+  "engines": {
+    "node": ">=20.16.0"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.80",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.93.1",
+    "@tailwindcss/postcss": "^4.1.18",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.3.1",
+    "lucide-react": "^0.563.0",
+    "next": "^16.1.5",
+    "openai": "^6.16.0",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.4.149",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tesseract.js": "^7.0.0",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.10",
+    "@types/react": "19.2.10",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.4.23",
+    "electron": "^40.1.0",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "^16.1.5",
+    "supabase": "^2.76.12",
+    "tailwindcss": "^4.1.18",
+    "typescript": "5.9.3",
+    "vercel": "^50.9.6"
+  }
+}

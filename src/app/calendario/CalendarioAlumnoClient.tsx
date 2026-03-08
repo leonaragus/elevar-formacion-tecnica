@@ -21,7 +21,7 @@ interface FechaEntrega {
     estado: string;
     fecha_entrega: string | null;
     nota: number | null;
-  };
+  } | null; // Puede ser un objeto o nulo
 }
 
 const TIPOS_ENTREGA_COLORES = {
@@ -66,7 +66,6 @@ export default function CalendarioAlumnoClient() {
       const { data: { session } } = await supabase.auth.getSession();
       const user = session?.user;
 
-      // Si no hay usuario, buscar curso en cookies
       let userCourseIds: string[] = [];
       
       if (user) {
@@ -79,7 +78,6 @@ export default function CalendarioAlumnoClient() {
           userCourseIds = inscripciones.map(i => String(i.curso_id));
         }
       } else {
-        // Fallback a cookies si no hay sesión Auth activa
         const cookies = document.cookie.split('; ');
         const studentOk = cookies.find(c => c.trim().startsWith('student_ok='))?.split('=')[1] === '1';
         const studentCourseId = cookies.find(c => c.trim().startsWith('student_course_id='))?.split('=')[1];
@@ -110,9 +108,10 @@ export default function CalendarioAlumnoClient() {
 
       if (error) throw error;
       
-      // Mapear 'titulo' a 'nombre' para mantener compatibilidad con la interfaz FechaEntrega si es necesario
       const mappedData = (entregasData || []).map((e: any) => ({
         ...e,
+        // Supabase con !left devuelve un array aunque sea 1-1, tomamos el primero o null
+        entrega_alumno: Array.isArray(e.entrega_alumno) ? e.entrega_alumno[0] || null : e.entrega_alumno,
         cursos: { nombre: e.cursos?.titulo || 'Curso' }
       }));
 
@@ -129,7 +128,7 @@ export default function CalendarioAlumnoClient() {
     return entregas.filter(entrega => {
       const tipoMatch = filtroTipo === 'todos' || entrega.tipo_entrega === filtroTipo;
       const estadoMatch = filtroEstado === 'todos' || 
-        (entrega.entrega_alumno?.[0]?.estado || 'pendiente') === filtroEstado;
+        (entrega.entrega_alumno?.estado || 'pendiente') === filtroEstado;
       return tipoMatch && estadoMatch;
     });
   };
@@ -141,14 +140,14 @@ export default function CalendarioAlumnoClient() {
     return diasDiferencia <= 7 && diasDiferencia >= 0;
   };
 
-  const esEntregaAtrasada = (fechaEntrega: string) => {
-    const hoy = new Date();
-    const entrega = new Date(fechaEntrega);
-    return isAfter(hoy, entrega) && !entrega.entrega_alumno?.[0]?.estado;
+  // Corregido: recibe el objeto de entrega completo
+  const esEntregaAtrasada = (entrega: FechaEntrega) => {
+    const hoy = startOfDay(new Date());
+    const fechaDeEntrega = startOfDay(new Date(entrega.fecha_entrega));
+    return isAfter(hoy, fechaDeEntrega) && !entrega.entrega_alumno?.estado;
   };
 
   const handleEntregaClick = async (entregaId: string) => {
-    // Aquí podrías abrir un modal para subir la entrega
     alert('Funcionalidad de entrega en desarrollo');
   };
 
@@ -164,7 +163,6 @@ export default function CalendarioAlumnoClient() {
         <h1 className="text-3xl font-bold text-gray-800">Mi Calendario de Entregas</h1>
         
         <div className="flex items-center space-x-4">
-          {/* Filtros */}
           <select
             value={filtroTipo}
             onChange={(e) => setFiltroTipo(e.target.value)}
@@ -190,7 +188,6 @@ export default function CalendarioAlumnoClient() {
             <option value="atrasado">Atrasados</option>
           </select>
 
-          {/* Vista */}
           <div className="flex border border-gray-300 rounded-lg">
             <button
               onClick={() => setVista('lista')}
@@ -216,18 +213,17 @@ export default function CalendarioAlumnoClient() {
         </div>
       </div>
 
-      {/* Resumen */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="text-2xl font-bold text-blue-600">
-            {entregasFiltradas.filter(e => !e.entrega_alumno?.[0]?.estado).length}
+            {entregasFiltradas.filter(e => !e.entrega_alumno?.estado).length}
           </div>
           <div className="text-sm text-blue-800">Pendientes</div>
         </div>
         
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
           <div className="text-2xl font-bold text-green-600">
-            {entregasFiltradas.filter(e => e.entrega_alumno?.[0]?.estado === 'entregado').length}
+            {entregasFiltradas.filter(e => e.entrega_alumno?.estado === 'entregado').length}
           </div>
           <div className="text-sm text-green-800">Entregados</div>
         </div>
@@ -241,13 +237,12 @@ export default function CalendarioAlumnoClient() {
         
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="text-2xl font-bold text-red-600">
-            {entregasFiltradas.filter(e => esEntregaAtrasada(e.fecha_entrega)).length}
+            {entregasFiltradas.filter(e => esEntregaAtrasada(e)).length}
           </div>
           <div className="text-sm text-red-800">Atrasadas</div>
         </div>
       </div>
 
-      {/* Vista de Lista */}
       {vista === 'lista' && (
         <div className="space-y-4">
           {entregasFiltradas.length === 0 ? (
@@ -301,19 +296,19 @@ export default function CalendarioAlumnoClient() {
                   
                   <div className="text-right">
                     <div className={`px-3 py-1 rounded-full text-sm font-medium mb-2 ${
-                      ESTADOS_COLORES[entrega.entrega_alumno?.[0]?.estado as keyof typeof ESTADOS_COLORES] || 
+                      ESTADOS_COLORES[entrega.entrega_alumno?.estado as keyof typeof ESTADOS_COLORES] || 
                       ESTADOS_COLORES.pendiente
                     }`}>
-                      {entrega.entrega_alumno?.[0]?.estado || 'pendiente'}
+                      {entrega.entrega_alumno?.estado || 'pendiente'}
                     </div>
                     
-                    {entrega.entrega_alumno?.[0]?.nota && (
+                    {entrega.entrega_alumno?.nota != null && (
                       <div className="text-lg font-bold text-blue-600">
-                        Nota: {entrega.entrega_alumno[0].nota}
+                        Nota: {entrega.entrega_alumno.nota}
                       </div>
                     )}
                     
-                    {!entrega.entrega_alumno?.[0]?.estado && (
+                    {!entrega.entrega_alumno?.estado && (
                       <button
                         onClick={() => handleEntregaClick(entrega.id)}
                         className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
@@ -329,7 +324,6 @@ export default function CalendarioAlumnoClient() {
         </div>
       )}
 
-      {/* Vista de Calendario */}
       {vista === 'calendario' && (
         <div className="bg-white rounded-lg shadow-md p-4">
           <div className="flex justify-between items-center mb-4">

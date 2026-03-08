@@ -1,8 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["@napi-rs/canvas", "pdf-parse", "pdfjs-dist"],
-  typescript: {
-    ignoreBuildErrors: true,
+  experimental: {
+    serverComponentsExternalPackages: ["@napi-rs/canvas", "pdf-parse", "pdfjs-dist"],
   },
 };
 

@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -20,17 +20,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
-    
-    // Get initial session
-    supabase.auth.getSession().then((res: { data: { session: Session | null } }) => {
-      const session = res.data.session;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -38,17 +36,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string) => {
     const e = String(email || "").trim().toLowerCase();
-    if (!e) throw new Error("Email requerido");
-    const expires = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toUTCString();
-    document.cookie = `student_email=${encodeURIComponent(e)}; path=/; expires=${expires}`;
+    if (!e) throw new Error("Email es requerido");
+
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase.auth.signInWithOtp({
+      email: e,
+      options: {
+        // Corrected: Redirect back to the courses page as originally intended.
+        emailRedirectTo: `${window.location.origin}/cursos`,
+      },
+    });
+
+    if (error) {
+      console.error("Error sending magic link:", error);
+      throw error;
+    }
   };
 
   const signUp = async (email: string, userData: any) => {
     const supabase = createSupabaseBrowserClient();
+    const password = Math.random().toString(36).slice(-16);
     const { error } = await supabase.auth.signUp({
       email,
+      password,
       options: {
         data: userData,
+        // Corrected: Redirect back to the courses page as originally intended.
+        emailRedirectTo: `${window.location.origin}/cursos`,
       },
     });
     if (error) throw error;
@@ -56,8 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    await supabase.auth.signOut();
     document.cookie = `student_email=; path=/; max-age=0`;
   };
 

@@ -153,14 +153,14 @@ export default async function MisClasesPage(props: PageProps) {
 
     if (cursosInscritos.length === 0) {
       return (
-        <div className="min-h-screen bg-gray-50 py-8">
+        <div className="min-h-screen bg-gray-950 py-8">
           <div className="max-w-4xl mx-auto px-4 text-center">
-            <div className="bg-white rounded-lg shadow-md p-8">
+            <div className="bg-gray-800 rounded-lg shadow-md p-8">
               <div className="text-6xl mb-4">📹</div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-4">
+              <h1 className="text-2xl font-bold text-white mb-4">
                 Mis Clases Grabadas
               </h1>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-400 mb-6">
                 No estás inscrito en ningún curso con clases grabadas disponibles.
               </p>
               <Link
@@ -176,22 +176,22 @@ export default async function MisClasesPage(props: PageProps) {
     }
 
     return (
-      <div className="min-h-screen bg-gray-50 py-8">
+      <div className="min-h-screen bg-gray-950 py-8">
         <div className="max-w-4xl mx-auto px-4">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            <h1 className="text-3xl font-bold text-white mb-2">
               📹 Mis Clases Grabadas
             </h1>
-            <p className="text-gray-600">
+            <p className="text-gray-400">
               Selecciona un curso para ver sus clases grabadas
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {cursosInscritos.map((inscripcion) => (
-              <div key={inscripcion.curso_id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+              <div key={inscripcion.curso_id} className="bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg hover:bg-gray-700 transition-shadow">
                 <div className="text-4xl mb-4 text-center">📚</div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-4 text-center">
+                <h3 className="text-xl font-semibold text-white mb-4 text-center">
                   {inscripcion.cursos.titulo}
                 </h3>
                 <Link
@@ -305,23 +305,23 @@ export default async function MisClasesPage(props: PageProps) {
     .single();
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gray-950 py-8">
       <div className="max-w-7xl mx-auto px-4">
         {/* Encabezado */}
         <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+            <h1 className="text-3xl font-bold text-white flex items-center gap-2">
               <span className="text-4xl">📹</span> Clases Grabadas
             </h1>
             {curso && (
-              <p className="text-xl text-gray-600 mt-1">
+              <p className="text-xl text-gray-400 mt-1">
                 📚 {curso.titulo}
               </p>
             )}
           </div>
           <Link
             href="/mis-clases"
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+            className="inline-flex items-center px-4 py-2 border border-gray-700 rounded-md shadow-sm text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 transition-colors"
           >
             ← Cambiar curso
           </Link>
@@ -346,11 +346,11 @@ export default async function MisClasesPage(props: PageProps) {
                 </div>
 
                 {/* Info de la Clase */}
-                <div className="bg-white rounded-xl shadow-sm p-6">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl shadow-sm p-6">
+                  <h2 className="text-2xl font-bold text-white mb-2">
                     {claseSeleccionada.titulo}
                   </h2>
-                  <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 mb-4">
+                  <div className="flex flex-wrap items-center gap-4 text-sm text-gray-400 mb-4">
                     <span className="flex items-center gap-1">
                       📅 {new Date(claseSeleccionada.fecha_clase).toLocaleDateString('es-ES', { 
                         day: 'numeric', month: 'long', year: 'numeric' 
@@ -368,14 +368,14 @@ export default async function MisClasesPage(props: PageProps) {
                     )}
                   </div>
                   {claseSeleccionada.descripcion && (
-                    <div className="prose prose-blue max-w-none text-gray-700">
+                    <div className="prose prose-invert max-w-none text-gray-300">
                       {claseSeleccionada.descripcion}
                     </div>
                   )}
                 </div>
 
                 {/* Sección de Comentarios (Legacy - se mantiene por compatibilidad visual, pero el botón flotante es el principal) */}
-                <div className="bg-white rounded-xl shadow-sm p-6 hidden md:block">
+                <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl shadow-sm p-6 hidden md:block">
                   <CommentsCourseSummary cursoId={String(cursoId)} />
                 </div>
                 
@@ -383,23 +383,23 @@ export default async function MisClasesPage(props: PageProps) {
                 <FloatingFeedbackButton cursoId={String(cursoId)} claseId={String(claseSeleccionada.id)} />
               </>
             ) : (
-              <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+              <div className="bg-gray-800 rounded-xl shadow-sm p-12 text-center">
                 <div className="text-6xl mb-4">📹</div>
-                <h3 className="text-xl font-semibold text-gray-900">No hay clases disponibles</h3>
-                <p className="text-gray-500 mt-2">Aún no se han subido videos para este curso.</p>
+                <h3 className="text-xl font-semibold text-white">No hay clases disponibles</h3>
+                <p className="text-gray-400 mt-2">Aún no se han subido videos para este curso.</p>
               </div>
             )}
           </div>
 
           {/* Sidebar: Lista de Clases */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden sticky top-8">
-              <div className="p-4 border-b bg-gray-50">
-                <h3 className="font-bold text-gray-900 flex items-center gap-2">
+            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl shadow-sm overflow-hidden sticky top-8">
+              <div className="p-4 border-b border-gray-700 bg-gray-800">
+                <h3 className="font-bold text-white flex items-center gap-2">
                   📋 Lista de Clases
                 </h3>
               </div>
-              <div className="divide-y max-h-[calc(100vh-200px)] overflow-y-auto">
+              <div className="divide-y divide-gray-700 max-h-[calc(100vh-200px)] overflow-y-auto">
                 {clases && clases.length > 0 ? (
                   clases.map((clase) => {
                     const isSelected = String(clase.id) === String(claseSeleccionada?.id);
@@ -407,23 +407,23 @@ export default async function MisClasesPage(props: PageProps) {
                       <Link
                         key={clase.id}
                         href={`/mis-clases?curso_id=${cursoId}&clase_id=${clase.id}`}
-                        className={`block p-4 hover:bg-blue-50 transition-colors ${
-                          isSelected ? 'bg-blue-50 border-l-4 border-blue-600' : ''
+                        className={`block p-4 hover:bg-gray-700/60 transition-colors ${
+                          isSelected ? 'bg-blue-900/50 border-l-4 border-blue-500' : ''
                         }`}
                       >
                         <div className="flex gap-3">
                           <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${
-                            isSelected ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500'
+                            isSelected ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
                           }`}>
                             <span className="text-lg">▶️</span>
                           </div>
                           <div className="min-w-0">
                             <h4 className={`text-sm font-bold truncate ${
-                              isSelected ? 'text-blue-900' : 'text-gray-900'
+                              isSelected ? 'text-white' : 'text-gray-200'
                             }`}>
                               {clase.titulo}
                             </h4>
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs text-gray-400 mt-1">
                               📅 {new Date(clase.fecha_clase).toLocaleDateString('es-ES')}
                             </p>
                           </div>
@@ -432,7 +432,7 @@ export default async function MisClasesPage(props: PageProps) {
                     );
                   })
                 ) : (
-                  <div className="p-8 text-center text-gray-500 text-sm">
+                  <div className="p-8 text-center text-gray-400 text-sm">
                     No hay otras clases
                   </div>
                 )}

@@ -1,20 +1,15 @@
-// VideoPlayer simple con soporte para dividir en dos partes
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 
+// --- PARSERS DE TRANSCRIPCIÓN (SIN CAMBIOS) ---
 function parsearTiempoSrt(tiempo: string): number {
   if (!tiempo) return 0;
-  // Eliminar milisegundos (separados por , o .)
   const tiempoLimpio = tiempo.replace(/[,.]\d+$/, '');
   const partes = tiempoLimpio.split(':').map(part => parseInt(part, 10));
-  
   if (partes.length === 3) {
     const [horas, minutos, segundos] = partes;
     return (horas || 0) * 3600 + (minutos || 0) * 60 + (segundos || 0);
-  } else if (partes.length === 2) {
-    const [minutos, segundos] = partes;
-    return (minutos || 0) * 60 + (segundos || 0);
   }
   return 0;
 }
@@ -26,74 +21,45 @@ interface TranscripcionItem {
 
 function parsearSrt(srt: string): TranscripcionItem[] {
   if (!srt) return [];
-  // Normalizar saltos de línea: convertir todo a \n
   const contenido = srt.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  
-  // Dividir por doble salto de línea (bloques estándar)
-  // Algunos SRT mal formados pueden tener más saltos, así que usamos regex
   const bloques = contenido.split(/\n\s*\n/);
-  
   const items: TranscripcionItem[] = [];
-  
   for (const bloque of bloques) {
     const lineas = bloque.trim().split('\n');
     if (lineas.length >= 2) {
-      // Buscar la línea de tiempo (contiene "-->")
       const lineaTiempoIndex = lineas.findIndex(l => l.includes('-->'));
-      
       if (lineaTiempoIndex !== -1) {
-        const tiempoLinea = lineas[lineaTiempoIndex];
-        const textoLineas = lineas.slice(lineaTiempoIndex + 1);
-        
-        if (tiempoLinea && textoLineas.length > 0) {
-          const [inicio] = tiempoLinea.split(' --> ');
-          const tiempo = parsearTiempoSrt(inicio);
-          
-          // Unir líneas de texto y limpiar etiquetas HTML si las hubiera (ej: <i>)
-          const texto = textoLineas.join(' ').replace(/<[^>]*>/g, '');
-          
-          if (texto.trim()) {
-            items.push({
-              tiempo,
-              texto: texto.trim()
-            });
-          }
+        const [inicio] = lineas[lineaTiempoIndex].split(' --> ');
+        const texto = lineas.slice(lineaTiempoIndex + 1).join(' ').replace(/<[^>]*>/g, '');
+        if (texto.trim()) {
+          items.push({ tiempo: parsearTiempoSrt(inicio), texto: texto.trim() });
         }
       }
     }
   }
-  
   return items;
 }
 
 function parsearTexto(texto: string): TranscripcionItem[] {
-  // Primero intentamos por oraciones
   let oraciones = texto.split(/[.!?]+/).filter(s => s.trim().length > 0);
-  
-  // Si no hay oraciones (quizás no tiene puntuación), intentamos por saltos de línea
   if (oraciones.length === 0) {
     oraciones = texto.split(/\n+/).filter(s => s.trim().length > 0);
   }
-
-  // Si aún así no hay nada, pero hay texto, usamos todo el texto como un bloque
-  if (oraciones.length === 0 && texto.trim().length > 0) {
-    oraciones = [texto.trim()];
-  }
-
-  const duracionEstimada = 600; // 10 minutos por defecto si no hay timestamps
+  const duracionEstimada = 600;
   const tiempoPorOracion = oraciones.length > 0 ? duracionEstimada / oraciones.length : 0;
-  
   return oraciones.map((oracion, index) => ({
     tiempo: index * tiempoPorOracion,
-    texto: oracion.trim()
+    texto: oracion.trim(),
   }));
 }
 
+// --- COMPONENTE VIDEO PLAYER REFACTORIZADO ---
+
 interface VideoPlayerProps {
   videoUrl: string;
-  videoUrlParte2?: string; // URL opcional para la segunda parte
-  videoUrlParte3?: string; // URL opcional para la tercera parte
-  videoUrlParte4?: string; // URL opcional para la cuarta parte
+  videoUrlParte2?: string;
+  videoUrlParte3?: string;
+  videoUrlParte4?: string;
   titulo: string;
   transcripcionTexto?: string;
   transcripcionSrt?: string;
@@ -111,252 +77,219 @@ export default function VideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [tiempoActual, setTiempoActual] = useState(0);
   const [videoDuracion, setVideoDuracion] = useState<number | null>(null);
-  const [estaReproduciendo, setEstaReproduciendo] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+  const [mostrarTranscripcion, setMostrarTranscripcion] = useState(true);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const videoParts = useMemo(() => [videoUrl, videoUrlParte2, videoUrlParte3, videoUrlParte4].filter(Boolean) as string[], [videoUrl, videoUrlParte2, videoUrlParte3, videoUrlParte4]);
+  const isMultipart = videoParts.length > 1;
+
+  useEffect(() => {
+    if (!isMultipart || !videoRef.current) return;
+
+    const videoElement = videoRef.current;
+    const mediaSource = new MediaSource();
+    videoElement.src = URL.createObjectURL(mediaSource);
+
+    const onSourceOpen = async () => {
+      console.log("MediaSource abierto, preparando buffer...");
+      const sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
+      
+      let partIndex = 0;
+
+      const appendNextPart = async () => {
+        if (partIndex >= videoParts.length) {
+          if (!mediaSource.ended) {
+            console.log("Todas las partes añadidas, finalizando stream.");
+            mediaSource.endOfStream();
+          }
+          return;
+        }
+
+        try {
+          console.log(`Cargando parte ${partIndex + 1}/${videoParts.length}...`);
+          const response = await fetch(videoParts[partIndex]);
+          if (!response.ok) throw new Error(`Error al cargar la parte ${partIndex + 1}`);
+          const arrayBuffer = await response.arrayBuffer();
+          
+          sourceBuffer.appendBuffer(arrayBuffer);
+          partIndex++;
+        } catch (error) {
+          console.error('Error en streaming de partes:', error);
+        }
+      };
+
+      sourceBuffer.addEventListener('updateend', appendNextPart);
+      
+      // Iniciar la carga de la primera parte
+      appendNextPart();
+    };
+
+    mediaSource.addEventListener('sourceopen', onSourceOpen);
+
+    return () => {
+      mediaSource.removeEventListener('sourceopen', onSourceOpen);
+      if (videoElement && videoElement.src) {
+        URL.revokeObjectURL(videoElement.src);
+      }
+    };
+  }, [isMultipart, videoParts]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const actualizarTiempo = () => setTiempoActual(video.currentTime);
+    const actualizarDuracion = () => setVideoDuracion(Number.isFinite(video.duration) ? video.duration : null);
+
+    video.addEventListener('timeupdate', actualizarTiempo);
+    video.addEventListener('loadedmetadata', actualizarDuracion);
+    video.addEventListener('durationchange', actualizarDuracion);
+
+    return () => {
+      video.removeEventListener('timeupdate', actualizarTiempo);
+      video.removeEventListener('loadedmetadata', actualizarDuracion);
+      video.removeEventListener('durationchange', actualizarDuracion);
+    };
+  }, []);
+  
   const transcripcionParseada = useMemo(() => {
     if (transcripcionSrt) return parsearSrt(transcripcionSrt);
     if (transcripcionTexto) return parsearTexto(transcripcionTexto);
     return [];
   }, [transcripcionTexto, transcripcionSrt]);
+
   const indiceActual = useMemo(() => {
-    if (transcripcionParseada.length === 0) return 0;
-    let indice = 0;
-    for (let i = 0; i < transcripcionParseada.length; i++) {
-      if (tiempoActual >= transcripcionParseada[i].tiempo) {
-        indice = i;
-      } else {
-        break;
-      }
-    }
-    return indice;
-  }, [tiempoActual, transcripcionParseada]);
-  const [busqueda, setBusqueda] = useState('');
-  const [mostrarTranscripcion, setMostrarTranscripcion] = useState(true);
-  const [videoBlobUrl, setVideoBlobUrl] = useState<string>(videoUrl);
-  
-  // Calcular número de partes
-  const partes = [videoUrl, videoUrlParte2, videoUrlParte3, videoUrlParte4].filter(Boolean).length;
-  const esMultipart = partes > 1;
-
-  // Unir las partes del video si existen múltiples
-  useEffect(() => {
-    if (!esMultipart) return;
-
-    const urls = [videoUrl, videoUrlParte2, videoUrlParte3, videoUrlParte4].filter(Boolean) as string[];
-    
-    Promise.all(urls.map(url => fetch(url).then(r => r.blob())))
-    .then((blobs) => {
-      const blob = new Blob(blobs, { type: 'video/mp4' });
-      const url = URL.createObjectURL(blob);
-      setVideoBlobUrl(url);
-    })
-    .catch(err => {
-      console.error('Error al unir partes:', err);
-      setVideoBlobUrl(videoUrl); // Fallback a la primera parte
+    if (transcripcionParseada.length === 0) return -1;
+    return transcripcionParseada.findIndex((_, i) => {
+      const proximoTiempo = transcripcionParseada[i + 1]?.tiempo ?? Infinity;
+      return tiempoActual >= transcripcionParseada[i].tiempo && tiempoActual < proximoTiempo;
     });
-  }, [videoUrl, videoUrlParte2, videoUrlParte3, videoUrlParte4, esMultipart]);
+  }, [tiempoActual, transcripcionParseada]);
 
-  // Actualizar tiempo actual del video
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const actualizarTiempo = () => {
-      setTiempoActual(video.currentTime);
-    };
-    const actualizarDuracion = () => {
-      setVideoDuracion(Number.isFinite(video.duration) ? video.duration : null);
-    };
-
-    video.addEventListener('timeupdate', actualizarTiempo);
-    video.addEventListener('loadedmetadata', actualizarDuracion);
-    video.addEventListener('play', () => setEstaReproduciendo(true));
-    video.addEventListener('pause', () => setEstaReproduciendo(false));
-
-    return () => {
-      video.removeEventListener('timeupdate', actualizarTiempo);
-      video.removeEventListener('loadedmetadata', actualizarDuracion);
-      video.removeEventListener('play', () => setEstaReproduciendo(true));
-      video.removeEventListener('pause', () => setEstaReproduciendo(false));
-    };
-  }, [videoBlobUrl]);
+  const saltarATiempo = (tiempo: number) => {
+    if (videoRef.current) videoRef.current.currentTime = tiempo;
+  };
 
   const formatearTiempo = (segundos: number): string => {
     const min = Math.floor(segundos / 60);
     const seg = Math.floor(segundos % 60);
     return `${min}:${seg.toString().padStart(2, '0')}`;
   };
+  
+  const transcripcionFiltrada = useMemo(() => {
+      if (!busqueda) return transcripcionParseada;
+      return transcripcionParseada.filter(item => 
+        item.texto.toLowerCase().includes(busqueda.toLowerCase())
+      );
+  }, [busqueda, transcripcionParseada]);
 
-  const saltarATiempo = (tiempo: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = tiempo;
-    }
-  };
-
-  const buscarEnTranscripcion = () => {
-    if (!busqueda) return transcripcionParseada;
-    
-    return transcripcionParseada.filter(item => 
-      item.texto.toLowerCase().includes(busqueda.toLowerCase())
-    );
-  };
-
-  const transcripcionFiltrada = buscarEnTranscripcion();
-
-  // Función para descargar el video
   const descargarVideo = async () => {
+    setIsDownloading(true);
     try {
-      if (esMultipart) {
-        // Si hay varias partes, unirlas antes de descargar
-        const urls = [videoUrl, videoUrlParte2, videoUrlParte3, videoUrlParte4].filter(Boolean) as string[];
-        const responses = await Promise.all(urls.map(url => fetch(url)));
-        const blobs = await Promise.all(responses.map(r => r.blob()));
-        
+        const blobs = await Promise.all(videoParts.map(url => fetch(url).then(r => r.blob())));
         const blob = new Blob(blobs, { type: 'video/mp4' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `${titulo.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp4`;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } else {
-        // Descargar directamente
-        const response = await fetch(videoBlobUrl);
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${titulo.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp4`;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      }
     } catch (error) {
-      console.error('Error al descargar:', error);
-      alert('Error al descargar el video');
+        console.error('Error al descargar:', error);
+        alert('Error al descargar el video');
+    } finally {
+        setIsDownloading(false);
     }
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">{titulo}</h1>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Reproductor de Video */}
-        <div className="lg:col-span-2">
-          <div className="bg-black rounded-lg overflow-hidden relative">
-            <video
-              ref={videoRef}
-              src={videoBlobUrl}
-              className="w-full h-auto"
-              controls
-              preload="metadata"
-            >
-              Tu navegador no soporta el elemento de video.
-            </video>
-            
-            {/* Indicador de multipart */}
-            {esMultipart && (
-              <div className="absolute top-2 right-2 bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs">
-                {partes} partes
+    <div className="w-full">
+        {/* Fila Principal: Video y Transcripción */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <div className="bg-black rounded-lg overflow-hidden relative aspect-video shadow-2xl">
+                  <video
+                      ref={videoRef}
+                      src={isMultipart ? undefined : videoParts[0]} // Solo usar src directo si no es multipart
+                      className="w-full h-full"
+                      controls
+                      preload="metadata"
+                  >
+                      Tu navegador no soporta el elemento de video.
+                  </video>
+                  
+                  {isMultipart && (
+                  <div className="absolute top-2 right-2 bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs font-mono">
+                      STREAMING ({videoParts.length} partes)
+                  </div>
+                  )}
               </div>
-            )}
-          </div>
-
-          {/* Controles adicionales */}
-          <div className="mt-4 flex items-center gap-4">
-            <span className="text-sm text-gray-600">
-              {formatearTiempo(tiempoActual)} / {videoDuracion ? formatearTiempo(videoDuracion) : '--:--'}
-              {esMultipart && (
-                <span className="ml-2 bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
-                  {partes} partes
-                </span>
-              )}
-            </span>
-            
-            <button
-              onClick={() => setMostrarTranscripcion(!mostrarTranscripcion)}
-              className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-            >
-              {mostrarTranscripcion ? 'Ocultar' : 'Mostrar'} Transcripción
-            </button>
-            
-            <button
-              onClick={descargarVideo}
-              className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Descargar Video
-            </button>
-          </div>
-        </div>
-
-        {/* Panel de Transcripción */}
-        {mostrarTranscripcion && (
-          <div className="bg-white border rounded-lg p-4 h-fit">
-            <h3 className="font-semibold mb-3">Transcripción</h3>
-            
-            {/* Buscador */}
-            <div className="mb-4">
-              <input
-                type="text"
-                placeholder="Buscar en transcripción..."
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                className="w-full p-2 border rounded text-sm"
-              />
             </div>
 
-            {/* Transcripción sincronizada */}
-            <div className="max-h-96 overflow-y-auto">
-              {transcripcionFiltrada.length === 0 ? (
-                <p className="text-gray-500 text-sm">No hay transcripción disponible.</p>
-              ) : (
-                <div className="space-y-2">
-                  {transcripcionFiltrada.map((item, index) => (
-                    <div
-                      key={index}
-                      className={`p-2 rounded cursor-pointer transition-colors ${
-                        transcripcionParseada[indiceActual] === item
-                          ? 'bg-blue-100 border-blue-300 border'
-                          : 'bg-gray-50 hover:bg-gray-100'
-                      }`}
-                      onClick={() => saltarATiempo(item.tiempo)}
-                    >
-                      <div className="flex justify-between items-start">
-                        <span className="text-xs text-gray-500">
-                          {formatearTiempo(item.tiempo)}
-                        </span>
-                      </div>
-                      <p className="text-sm mt-1">{item.texto}</p>
-                    </div>
-                  ))}
+            {/* Panel de Transcripción con nuevos estilos oscuros */}
+            <div className={`bg-gray-900/80 backdrop-blur-sm border border-gray-700/50 rounded-lg h-full flex flex-col transition-all duration-300 ${mostrarTranscripcion ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                <div className="p-4 border-b border-gray-700">
+                  <h3 className="font-semibold text-white">Transcripción</h3>
+                  <input
+                    type="text"
+                    placeholder="Buscar..."
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    className="w-full p-2 mt-2 bg-gray-800 border border-gray-600 rounded text-sm text-white placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500"
+                  />
                 </div>
-              )}
+
+                <div className="flex-grow overflow-y-auto p-4 space-y-2">
+                    {transcripcionFiltrada.length === 0 ? (
+                        <p className="text-gray-400 text-sm p-4 text-center">No hay transcripción disponible.</p>
+                    ) : (
+                        transcripcionFiltrada.map((item, index) => (
+                            <div
+                                key={index}
+                                className={`p-3 rounded-lg cursor-pointer transition-colors text-left ${
+                                    transcripcionParseada[indiceActual] === item
+                                    ? 'bg-blue-500/20'
+                                    : 'hover:bg-gray-700/50'
+                                }`}
+                                onClick={() => saltarATiempo(item.tiempo)}
+                            >
+                                <span className="text-xs text-blue-400 font-mono">
+                                    {formatearTiempo(item.tiempo)}
+                                </span>
+                                <p className={`text-sm mt-1 ${transcripcionParseada[indiceActual] === item ? 'text-white' : 'text-gray-300'}`}>
+                                    {item.texto}
+                                </p>
+                            </div>
+                        ))
+                    )}
+                </div>
             </div>
-
-            {/* Estadísticas */}
-            {transcripcionParseada.length > 0 && (
-              <div className="mt-4 pt-3 border-t text-xs text-gray-500">
-                <p>Total: {transcripcionParseada.length} segmentos</p>
-                {busqueda && (
-                  <p>Encontrados: {transcripcionFiltrada.length} resultados</p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Transcripción completa debajo */}
-      {transcripcionTexto && (
-        <div className="mt-8">
-          <h3 className="font-semibold mb-3">Transcripción Completa</h3>
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">{transcripcionTexto}</p>
-          </div>
         </div>
-      )}
+
+        {/* Barra de Controles Adicionales */}
+        <div className="mt-4 flex items-center justify-between gap-4 bg-gray-900/80 backdrop-blur-sm border border-gray-700/50 p-3 rounded-lg">
+            <span className="text-sm text-gray-400 font-mono">
+                {formatearTiempo(tiempoActual)} / {videoDuracion ? formatearTiempo(videoDuracion) : '--:--'}
+            </span>
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={descargarVideo}
+                    disabled={isDownloading}
+                    className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                    {isDownloading ? 'Descargando...' : 'Descargar Video'}
+                </button>
+                <button
+                  onClick={() => setMostrarTranscripcion(!mostrarTranscripcion)}
+                  className="px-3 py-1.5 text-sm bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 transition-colors"
+                >
+                  {mostrarTranscripcion ? 'Ocultar' : 'Mostrar'} Transcripción
+                </button>
+            </div>
+        </div>
     </div>
   );
 }

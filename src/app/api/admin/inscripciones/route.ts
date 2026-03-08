@@ -144,14 +144,14 @@ export async function GET(req: NextRequest) {
 
     if (userIds.length > 0) {
       // Usar pagina grande para traer más usuarios
-      const { data: users, error: usersError } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      const { data: usersResponse, error: usersError } = await supabase.auth.admin.listUsers({ perPage: 1000 });
       if (usersError) {
           console.error("Error listing users:", usersError);
           debugInfo.usersError = usersError.message;
       }
       
-      if (users) {
-        users.forEach(u => {
+      if (usersResponse && usersResponse.users) {
+        usersResponse.users.forEach(u => {
           if (userIds.includes(u.id)) {
             userInfo[u.id] = { 
               email: u.email, 

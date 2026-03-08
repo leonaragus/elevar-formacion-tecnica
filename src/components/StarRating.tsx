@@ -79,13 +79,13 @@ export default function StarRating({ claseId }: { claseId: string }) {
   }
 
   return (
-    <div className="flex flex-col items-center gap-2 p-4 bg-white rounded-lg shadow-sm">
+    <div className="flex flex-col items-center gap-2 p-4 bg-gray-800/50 rounded-lg">
       <div className="flex items-center gap-1">
         {[1, 2, 3, 4, 5].map((star) => (
           <button
             key={star}
-            className={`text-2xl transition-colors ${
-              (hover || rating) >= star ? 'text-yellow-400' : 'text-gray-300'
+            className={`text-3xl transition-colors ${
+              (hover || rating) >= star ? 'text-yellow-400' : 'text-gray-600'
             }`}
             onClick={() => handleRate(star)}
             onMouseEnter={() => setHover(star)}
@@ -96,10 +96,10 @@ export default function StarRating({ claseId }: { claseId: string }) {
           </button>
         ))}
       </div>
-      <div className="text-sm text-gray-500">
+      <div className="text-sm text-gray-400">
         {average > 0 ? (
           <>
-            <span className="font-bold text-gray-900">{average.toFixed(1)}</span>
+            <span className="font-bold text-white">{average.toFixed(1)}</span>
             <span className="mx-1">/</span>
             5 ({count} votos)
           </>

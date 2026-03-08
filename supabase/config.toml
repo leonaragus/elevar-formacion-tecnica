@@ -1,0 +1,22 @@
+# supabase/config.toml
+
+# A unique identifier for your project.
+project_id = "elevar-project"
+
+[api]
+# The port to use for the API gateway.
+default_api_port = 8000
+
+[db]
+# The port to use for the local database.
+port = 5432
+
+[studio]
+# The port to use for Supabase Studio.
+port = 8082
+
+# Configuration for the local email testing server.
+[inbucket]
+port = 54321
+enable_tls = false
+

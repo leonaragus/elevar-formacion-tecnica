@@ -37,8 +37,11 @@ import Link from "next/link";
     user_id: string;
     curso_id: string;
     estado: string;
+    created_at: string;
     user_email?: string | null;
     curso_titulo?: string | null;
+    nombre?: string | null;
+    apellido?: string | null;
   }[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -803,7 +806,7 @@ import Link from "next/link";
                          <div className="text-sm text-slate-200">
                            <div>
                              Alumno: <span className="font-medium">
-                               {[p as any]?.nombre || ""} {[p as any]?.apellido || ""}
+                               {p.nombre || ""} {p.apellido || ""}
                              </span>
                            </div>
                            <div className="text-xs">

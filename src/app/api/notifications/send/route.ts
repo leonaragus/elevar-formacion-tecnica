@@ -72,12 +72,12 @@ export async function POST(request: NextRequest) {
 
     // Check if user is admin or instructor
     const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
+      .from('perfiles')
+      .select('rol')
       .eq('id', user.id)
       .single();
 
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'instructor')) {
+    if (!profile || (profile.rol !== 'admin' && profile.rol !== 'instructor')) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
     }
 
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     if (user_email) {
       // Send to specific user
       const { data: userData, error: userError } = await supabase
-        .from('profiles')
+        .from('perfiles')
         .select('id')
         .eq('email', user_email)
         .single();
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
         results.push({
           user_id: subscription.user_id,
           status: 'sent',
-          messageId: result.headers.get('location') || 'unknown'
+          messageId: result.headers['location'] || 'unknown'
         });
 
       } catch (error: any) {

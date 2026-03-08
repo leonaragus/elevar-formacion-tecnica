@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useState, useEffect } from 'react';
 import { Bell, BellOff, Loader2 } from 'lucide-react';
@@ -13,10 +13,11 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 interface PushNotificationToggleProps {
   cursoId: string;
+  cursoTitle?: string; // Añadido para mostrar mensajes más específicos
   className?: string;
 }
 
-export default function PushNotificationToggle({ cursoId, className = "" }: PushNotificationToggleProps) {
+export default function PushNotificationToggle({ cursoId, cursoTitle, className = "" }: PushNotificationToggleProps) {
   const [isEnabled, setIsEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<'checking' | 'subscribed' | 'unsubscribed' | 'unsupported'>('checking');
@@ -115,6 +116,8 @@ export default function PushNotificationToggle({ cursoId, className = "" }: Push
     }
   };
 
+  const titleText = cursoTitle ? ` para "${cursoTitle}"` : '';
+
   if (subscriptionStatus === 'unsupported') {
     return (
       <div className={`flex items-center p-3 bg-gray-100 dark:bg-gray-800 rounded-lg ${className}`}>
@@ -151,7 +154,11 @@ export default function PushNotificationToggle({ cursoId, className = "" }: Push
         <BellOff className="w-5 h-5 mr-2" />
       )}
       <span className="text-sm font-medium">
-        {isLoading ? 'Procesando...' : isEnabled ? 'Notificaciones activadas' : 'Activar notificaciones'}
+        {isLoading
+          ? 'Procesando...'
+          : isEnabled
+          ? `Notificaciones activadas${titleText}`
+          : `Activar notificaciones${titleText}`}
       </span>
     </button>
   );

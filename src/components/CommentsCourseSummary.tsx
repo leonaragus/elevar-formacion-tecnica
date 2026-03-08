@@ -1,104 +1,110 @@
-"use client";
+'''"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import CommentInput from "./CommentInput"; // Importamos el nuevo componente
 
 type Item = {
   id: string;
   clase_id: string;
-  clase_titulo: string;
+  clase_titulo?: string; // Lo hacemos opcional porque el input no lo necesita
   author_email?: string | null;
   author_id?: string | null;
   texto: string;
   created_at: string;
+  isOptimistic?: boolean;
 };
 
-export default function CommentsCourseSummary({ cursoId, compact = false }: { cursoId: string, compact?: boolean }) {
-  const [items, setItems] = useState<Item[]>([]);
-  const [filterId, setFilterId] = useState<string>("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`/api/cursos/comentarios?curso_id=${encodeURIComponent(cursoId)}`, {
-          cache: "no-store",
-        });
-        const json = await res.json();
-        if (json?.ok) {
-          setItems(Array.isArray(json.items) ? json.items : []);
-        } else {
-          setError(json?.error || "Error");
-        }
-      } catch (e: any) {
-        setError(e?.message || "Error");
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [cursoId]);
-
-  const clases = useMemo(() => {
-    const unique = new Map<string, string>();
-    items.forEach((i) => {
-      if (!unique.has(i.clase_id)) unique.set(i.clase_id, i.clase_titulo || "Clase");
-    });
-    return Array.from(unique.entries()).map(([id, titulo]) => ({ id, titulo }));
-  }, [items]);
-
-  const visible = useMemo(() => {
-    return filterId ? items.filter((i) => i.clase_id === filterId) : items;
-  }, [items, filterId]);
-
+function Avatar({ text }: { text: string }) {
+  const initial = (text || "A").charAt(0).toUpperCase();
+  const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-red-500', 'bg-yellow-500', 'bg-indigo-500'];
+  const color = colors[initial.charCodeAt(0) % colors.length];
+  
   return (
-    <div className={`bg-white rounded-lg shadow-sm ${compact ? '' : 'p-6 mb-8'}`}>
-      {!compact && (
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">💬 Comentarios del curso</h2>
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600">Filtrar por clase:</label>
-            <select
-              value={filterId}
-              onChange={(e) => setFilterId(e.target.value)}
-              className="text-sm border border-gray-300 rounded-md p-2"
-            >
-              <option value="">Todas</option>
-              {clases.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.titulo || c.id}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      )}
-
-      {loading ? (
-        <p className="text-sm text-gray-600 p-4">Cargando comentarios...</p>
-      ) : visible.length === 0 ? (
-        <p className="text-sm text-gray-600 p-4">Aún no hay comentarios en este curso.</p>
-      ) : (
-        <ul className="space-y-4">
-          {visible.map((c) => (
-            <li key={c.id} className="border border-gray-200 rounded-md p-4 bg-white">
-              <div className="text-sm text-gray-900 font-medium mb-1">{c.clase_titulo || "Clase"}</div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-gray-500 font-medium">
-                  {c.author_email ? c.author_email.split('@')[0] : c.author_id ? "Usuario" : "Anónimo"}
-                </span>
-                <span className="text-xs text-gray-400">
-                  {new Date(c.created_at).toLocaleDateString()}
-                </span>
-              </div>
-              <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{c.texto}</p>
-            </li>
-          ))}
-        </ul>
-      )}
-      {error && <p className="text-sm text-red-600 mt-3 p-4">{error}</p>}
+    <div className={`w-10 h-10 rounded-full ${color} flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
+      {initial}
     </div>
   );
 }
+
+function CommentItem({ item }: { item: Item }) {
+  const authorName = item.author_email ? item.author_email.split('@')[0] : "Anónimo";
+  
+  return (
+    <li className={`flex items-start gap-3 p-4 rounded-lg bg-gray-900/50 border border-gray-700/80 ${item.isOptimistic ? 'opacity-60' : ''}`}>
+      <Avatar text={authorName} />
+      <div className="flex-1">
+        <div className="flex items-baseline justify-between">
+          <span className="font-bold text-blue-400">
+            {authorName}
+          </span>
+          <span className="text-xs text-gray-500">
+            {new Date(item.created_at).toLocaleString()}
+          </span>
+        </div>
+        <p className="text-sm text-gray-300 mt-1 whitespace-pre-wrap leading-relaxed">{item.texto}</p>
+      </div>
+    </li>
+  );
+}
+
+export default function CommentsCourseSummary({ cursoId, claseId }: { cursoId: string, claseId: string }) {
+  const [items, setItems] = useState<Item[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadComments = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/clases/comentarios?clase_id=${encodeURIComponent(claseId)}`, {
+        cache: "no-store",
+      });
+      const json = await res.json();
+      if (json?.ok) {
+        setItems(Array.isArray(json.items) ? json.items : []);
+      } else {
+        setError(json?.error || "Error al cargar comentarios");
+      }
+    } catch (e: any) {
+      setError(e?.message || "Error de conexión");
+    } finally {
+      setLoading(false);
+    }
+  }, [claseId]);
+
+  useEffect(() => {
+    loadComments();
+  }, [loadComments]);
+
+  const handleCommentAdded = (newItem: Item) => {
+    setItems(prevItems => [newItem, ...prevItems]);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* El input para añadir un nuevo comentario */}
+      <CommentInput claseId={claseId} onCommentAdded={handleCommentAdded} />
+
+      {/* La lista de comentarios */}
+      <div className="space-y-4">
+        {loading && items.length === 0 ? (
+          <p className="text-sm text-gray-400 p-4 text-center">Cargando comentarios...</p>
+        ) : items.length === 0 && !loading ? (
+          <div className="text-center py-8 px-4 bg-gray-900/50 rounded-lg border border-dashed border-gray-700">
+            <h3 className="text-lg font-medium text-white">No hay comentarios todavía</h3>
+            <p className="text-sm text-gray-400 mt-1">¡Sé el primero en dejar tu pregunta o aporte!</p>
+          </div>
+        ) : (
+          <ul className="space-y-4">
+            {items.map((item) => (
+              <CommentItem key={item.id} item={item} />
+            ))}
+          </ul>
+        )}
+      </div>
+      
+      {error && <p className="text-sm text-red-500 mt-3 p-4 text-center">{error}</p>}
+    </div>
+  );
+}
+'''

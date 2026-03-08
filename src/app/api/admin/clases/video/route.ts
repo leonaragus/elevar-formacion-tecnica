@@ -12,7 +12,6 @@ async function pickBucket(supabase: ReturnType<typeof createSupabaseAdminClient>
     if (names.includes('videos')) return 'videos';
     if (names.includes('materiales')) return 'materiales';
     if (names.includes('clases-grabadas') && targetSize <= 50 * 1024 * 1024) return 'clases-grabadas';
-    // Try to create 'videos' if service role is available
     try {
       await supabase.storage.createBucket('videos', { public: true });
       return 'videos';
@@ -71,7 +70,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true, receivedChunk: chunkIndex });
       }
 
-    // Process the complete file
     const stats = fs.statSync(tmpPath);
     const fileSize = stats.size;
     const MAX_PART = 45 * 1024 * 1024;
@@ -89,7 +87,6 @@ export async function POST(request: NextRequest) {
     let esMultipart = false;
     let totalPartes = 1;
 
-    // Helper to read chunk into buffer (memory safe)
     const readChunk = (start: number, end: number) => {
       const size = end - start;
       const buffer = Buffer.alloc(size);
@@ -191,67 +188,38 @@ export async function POST(request: NextRequest) {
       .select('id')
       .single();
     if (insertError) {
-      const fallback = await supabase
-        .from('clases_grabadas')
-        .insert({
-          curso_id: cursoId,
-          titulo: titulo || 'Clase',
-          descripcion: descripcion || null,
-          fecha_clase: new Date().toISOString(),
-          duracion_minutos: duracionMin ? parseInt(duracionMin) : 0,
-          transcripcion_texto: transcripcionTexto || null,
-          transcripcion_srt: transcripcionSrt || null,
-          tiene_transcripcion: Boolean(transcripcionTexto || transcripcionSrt),
-          orden: 1,
-          es_activo: true,
-          activo: true,
-          video_path: videoPath,
-          video_public_url: publicUrl,
-          video_tamano_bytes: fileSize,
-          updated_at: new Date().toISOString()
-        })
-        .select('id')
-        .single();
-      insertData = fallback.data;
-      insertError = fallback.error;
-      if (insertError) throw insertError;
+        throw insertError;
     }
     claseRowId = String(insertData?.id || '');
       const { data: videosActuales, error: countError } = await supabase
         .from('clases_grabadas')
-        .select('id, video_path, orden')
+        .select('id, fecha_clase, video_path, video_path_parte2, video_path_parte3, video_path_parte4')
         .eq('curso_id', cursoId)
         .eq('activo', true)
-        .order('orden', { ascending: true });
-      if (countError) throw countError;
-      let videoAEliminar: any = null;
-      if (Array.isArray(videosActuales) && videosActuales.length > 2) {
-        videoAEliminar = videosActuales[0];
-      }
-      if (videoAEliminar) {
-        const { error: updateError } = await supabase
-          .from('clases_grabadas')
-          .update({ 
-            activo: false, 
-            es_activo: false,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', videoAEliminar.id);
-        if (!updateError) {
-          const toRemove = [videoAEliminar.video_path];
-          if ((videoAEliminar as any).video_path_parte2) {
-            toRemove.push((videoAEliminar as any).video_path_parte2);
-          }
-          const { error: deleteError } = await supabase.storage
-            .from(bucket)
-            .remove(toRemove);
+        .order('fecha_clase', { ascending: true });
+
+      if (countError) {
+          console.error("Error al contar videos para rotación:", countError.message);
+      } else if (Array.isArray(videosActuales) && videosActuales.length > 2) {
+        const videoAEliminar = videosActuales[0];
+        const filesToDelete = [videoAEliminar.video_path, videoAEliminar.video_path_parte2, videoAEliminar.video_path_parte3, videoAEliminar.video_path_parte4].filter(Boolean);
+        
+        if (filesToDelete.length > 0) {
+            const buckets = ['videos', 'materiales', 'clases-grabadas'];
+            for (const b of buckets) {
+                await supabase.storage.from(b).remove(filesToDelete);
+            }
+        }
+
+        const { error: deleteDbError } = await supabase.from('clases_grabadas').delete().eq('id', videoAEliminar.id);
+        if (deleteDbError) {
+            console.error('Error al borrar la fila de la clase antigua:', deleteDbError.message);
         }
       }
       return NextResponse.json({
         success: true,
         videoPath,
         publicUrl,
-        videoEliminado: videoAEliminar ? videoAEliminar.id : null,
         claseId: claseRowId
       });
     }
@@ -260,8 +228,7 @@ export async function POST(request: NextRequest) {
     if (!videoFile) {
       return NextResponse.json({ error: 'Falta video' }, { status: 400 });
     }
-    let videoAEliminar: any = null;
-
+    
     const MAX_PART = 45 * 1024 * 1024;
     const bucket = await pickBucket(supabase, Math.min(videoFile.size || 0, MAX_PART));
     const baseName = `${Date.now()}_${videoFile.name}`;
@@ -360,70 +327,34 @@ export async function POST(request: NextRequest) {
       .select('id')
       .single();
     if (insertError2) {
-      const fallback2 = await supabase
-        .from('clases_grabadas')
-        .insert({
-          curso_id: cursoId,
-          titulo: titulo || 'Clase',
-          descripcion: descripcion || null,
-          fecha_clase: new Date().toISOString(),
-          duracion_minutos: duracionMin ? parseInt(duracionMin) : 0,
-          transcripcion_texto: transcripcionTexto || null,
-          transcripcion_srt: transcripcionSrt || null,
-          tiene_transcripcion: Boolean(transcripcionTexto || transcripcionSrt),
-          orden: 1,
-          es_activo: true,
-          activo: true,
-          video_path: videoPath,
-          video_public_url: publicUrl,
-          video_tamano_bytes: videoFile.size,
-          updated_at: new Date().toISOString()
-        })
-        .select('id')
-        .single();
-      insertData2 = fallback2.data;
-      insertError2 = fallback2.error;
-      if (insertError2) throw insertError2;
+        throw insertError2;
     }
     claseRowId = String(insertData2?.id || '');
-    const { data: videosActuales2 } = await supabase
+    const { data: videosActuales2, error: countError2 } = await supabase
       .from('clases_grabadas')
-      .select('id, video_path, orden')
+      .select('id, fecha_clase, video_path, video_path_parte2, video_path_parte3, video_path_parte4')
       .eq('curso_id', cursoId)
       .eq('activo', true)
-      .order('orden', { ascending: true });
-    if (Array.isArray(videosActuales2) && videosActuales2.length > 2) {
-      videoAEliminar = videosActuales2[0];
-      const { error: updateError2 } = await supabase
-        .from('clases_grabadas')
-        .update({ activo: false, es_activo: false, updated_at: new Date().toISOString() })
-        .eq('id', videoAEliminar.id);
-      if (!updateError2) {
-        const toRemove = [videoAEliminar.video_path];
-        if ((videoAEliminar as any).video_path_parte2) {
-          toRemove.push((videoAEliminar as any).video_path_parte2);
-        }
-        if ((videoAEliminar as any).video_path_parte3) {
-          toRemove.push((videoAEliminar as any).video_path_parte3);
-        }
-        if ((videoAEliminar as any).video_path_parte4) {
-          toRemove.push((videoAEliminar as any).video_path_parte4);
+      .order('fecha_clase', { ascending: true });
+
+      if (countError2) {
+          console.error("Error al contar videos para rotación:", countError2.message);
+      } else if (Array.isArray(videosActuales2) && videosActuales2.length > 2) {
+        const videoAEliminar = videosActuales2[0];
+        const filesToDelete = [videoAEliminar.video_path, videoAEliminar.video_path_parte2, videoAEliminar.video_path_parte3, videoAEliminar.video_path_parte4].filter(Boolean);
+        
+        if (filesToDelete.length > 0) {
+            const buckets = ['videos', 'materiales', 'clases-grabadas'];
+            for (const b of buckets) {
+                await supabase.storage.from(b).remove(filesToDelete);
+            }
         }
 
-        let deleted = false;
-        // 1. Try from public URL regex if available (not selected in query currently, need to update select)
-        // Wait, the select query above only selects id, video_path, orden.
-        // We need video_public_url to try regex.
-        
-        // Let's just try all buckets as fallback since we don't have public_url selected here easily without changing the query.
-        // Or update the query.
-        
-        const buckets = ['videos', 'materiales', 'clases-grabadas'];
-        for (const b of buckets) {
-            await supabase.storage.from(b).remove(toRemove);
+        const { error: deleteDbError } = await supabase.from('clases_grabadas').delete().eq('id', videoAEliminar.id);
+        if (deleteDbError) {
+            console.error('Error al borrar la fila de la clase antigua:', deleteDbError.message);
         }
       }
-    }
 
     return NextResponse.json({
       success: true,
@@ -431,7 +362,6 @@ export async function POST(request: NextRequest) {
       publicUrl,
       videoPathParte2,
       publicUrlParte2,
-      videoEliminado: videoAEliminar ? videoAEliminar.id : null,
       claseId: claseRowId
     });
 
@@ -529,31 +459,23 @@ export async function DELETE(request: NextRequest) {
 
     // 2. Eliminar archivos del storage (Best Effort)
     try {
-        const filesToDelete = [clase.video_path];
-        if (clase.video_path_parte2) filesToDelete.push(clase.video_path_parte2);
-        if (clase.video_path_parte3) filesToDelete.push(clase.video_path_parte3);
-        if (clase.video_path_parte4) filesToDelete.push(clase.video_path_parte4);
-        
-        // Filtrar null/undefined/vacíos
-        const validFilesToDelete = filesToDelete.filter(p => p && typeof p === 'string' && p.trim() !== '');
+        const filesToDelete = [clase.video_path, clase.video_path_parte2, clase.video_path_parte3, clase.video_path_parte4].filter(p => p && typeof p === 'string' && p.trim() !== '');
 
-        if (validFilesToDelete.length > 0) {
+        if (filesToDelete.length > 0) {
             let deleted = false;
             
-            // 1. Try from public URL regex
             if (clase.video_public_url) {
                 const match = clase.video_public_url.match(/\/storage\/v1\/object\/public\/([^\/]+)\//);
                 if (match && match[1]) {
-                    const { error } = await supabase.storage.from(match[1]).remove(validFilesToDelete);
+                    const { error } = await supabase.storage.from(match[1]).remove(filesToDelete);
                     if (!error) deleted = true;
                 }
             }
 
-            // 2. If not deleted (or no public URL), try known buckets
             if (!deleted) {
                  const buckets = ['videos', 'materiales', 'clases-grabadas'];
                  for (const b of buckets) {
-                   await supabase.storage.from(b).remove(validFilesToDelete);
+                   await supabase.storage.from(b).remove(filesToDelete);
                  }
             }
         }
@@ -561,10 +483,10 @@ export async function DELETE(request: NextRequest) {
         console.error('Error eliminando archivos de storage (ignorable):', storageError);
     }
 
-    // 3. Actualizar DB (marcar como inactivo)
+    // 3. Borrar de la base de datos
     const { error } = await supabase
       .from('clases_grabadas')
-      .update({ activo: false, es_activo: false, updated_at: new Date().toISOString() })
+      .delete()
       .eq('id', id);
 
     if (error) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { devEvaluaciones } from "@/lib/devstore";
 import { devCursos } from "@/lib/devstore";
@@ -80,8 +80,9 @@ export async function GET(req: NextRequest) {
                     .limit(1)
                     .single();
                 
-                if (insc?.cursos?.titulo) {
-                    enforcedCourse = String(insc.cursos.titulo);
+                const cursoInfo = Array.isArray(insc?.cursos) ? insc.cursos[0] : insc?.cursos;
+                if (cursoInfo?.titulo) {
+                    enforcedCourse = String(cursoInfo.titulo);
                 }
             }
         } catch {}
