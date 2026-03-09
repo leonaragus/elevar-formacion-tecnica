@@ -1,20 +1,20 @@
-import * as pdfjs from "pdfjs-dist/build/pdf.mjs";
-
-// *********************************************************************************
-// ESTA ES LA LÍNEA CLAVE QUE FALTA
-// Desactiva el uso de "workers" en el servidor. pdf.js intentará usar un worker
-// para no bloquear el hilo principal, pero en un entorno de servidor como el de 
-// Next.js/Vercel, esto falla si el archivo del worker no se encuentra.
-// Al establecer un worker falso, forzamos a que todo se ejecute en el hilo principal,
-// lo que es más lento pero mucho más fiable en este contexto.
-// *********************************************************************************
-await pdfjs.GlobalWorkerOptions.workerSrc(
-  `data:application/javascript,importScripts("");`
-);
+// Importación dinámica: Esta es la clave.
+// En lugar de importar 'pdfjs-dist' directamente, lo cargaremos solo cuando sea necesario.
+// Esto evita que el código del navegador se ejecute en el servidor durante la compilación.
 
 export async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
-    // Usamos el buffer de datos directamente
+    // 1. Carga dinámica de la librería
+    const pdfjs = await import("pdfjs-dist/build/pdf.mjs");
+
+    // 2. Configuración del "worker" para el entorno de servidor
+    // Esta es la forma recomendada para evitar errores en Next.js/Vercel.
+    // Le decimos a pdf.js que no intente cargar un script de worker externo.
+    await pdfjs.GlobalWorkerOptions.workerSrc(
+      `data:application/javascript,importScripts("");`
+    );
+
+    // 3. Extracción del texto (lógica sin cambios)
     const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
     const pdf = await loadingTask.promise;
 
@@ -23,14 +23,11 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
 
     console.log(`Extracting text from PDF with ${numPages} pages...`);
 
-    // Extraer texto de todas las páginas
     for (let i = 1; i <= numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      
-      // Unir los fragmentos de texto de la página
       const pageText = content.items.map((item: any) => item.str).join(" ");
-      fullText += pageText + "\n\n"; // Añadir un salto de línea entre páginas
+      fullText += pageText + "\n\n";
     }
 
     if (fullText.trim().length > 0) {
