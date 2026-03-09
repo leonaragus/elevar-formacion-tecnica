@@ -1,35 +1,37 @@
--- Final fix for clases_grabadas table and RLS policies
+-- Final fix for clases_grabadas table and RLS policies (v2, corrected order)
 -- This ensures compatibility with the core schema and fixes broken policies
 
--- 1. IDENTIFICAR Y CORREGIR TIPOS Y COLUMNAS
--- Aseguramos que la columna profesor exista en la tabla cursos (por si acaso no se aplicó el core_schema)
+-- 1. DROP ALL POTENTIALLY CONFLICTING RLS POLICIES FIRST
+DROP POLICY IF EXISTS "Alumnos pueden ver clases de sus cursos" ON clases_grabadas;
+DROP POLICY IF EXISTS "Profesores pueden gestionar clases de sus cursos" ON clases_grabadas;
+DROP POLICY IF EXISTS "Administradores pueden ver todo" ON clases_grabadas;
+DROP POLICY IF EXISTS "Profesores pueden gestionar sus clases" ON clases_grabadas;
+
+-- 2. IDENTIFY AND CORRECT COLUMN TYPES
+-- Ensure the 'profesor' column exists in the 'cursos' table
 ALTER TABLE cursos ADD COLUMN IF NOT EXISTS profesor TEXT;
 
--- El error anterior indicaba conflicto UUID vs TEXT.
--- Vamos a detectar el tipo real de cursos.id y ajustar clases_grabadas.curso_id.
--- Si cursos.id es UUID, convertimos clases_grabadas.curso_id a UUID.
--- Si cursos.id es TEXT, convertimos clases_grabadas.curso_id a TEXT.
-
-DO $$ 
+-- Detect the actual data type of 'cursos.id' and adjust 'clases_grabadas.curso_id' to match.
+DO $$
 DECLARE
     tipo_id text;
 BEGIN
-    -- Obtener el tipo de dato de cursos.id
-    SELECT data_type INTO tipo_id 
-    FROM information_schema.columns 
+    -- Get the data type of cursos.id
+    SELECT data_type INTO tipo_id
+    FROM information_schema.columns
     WHERE table_name = 'cursos' AND column_name = 'id';
 
     -- Drop the foreign key if it exists to allow type change
     IF EXISTS (
-        SELECT 1 
-        FROM information_schema.table_constraints 
-        WHERE constraint_name = 'clases_grabadas_curso_id_fkey' 
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'clases_grabadas_curso_id_fkey'
         AND table_name = 'clases_grabadas'
     ) THEN
         ALTER TABLE clases_grabadas DROP CONSTRAINT clases_grabadas_curso_id_fkey;
     END IF;
 
-    -- Aplicar el cambio de tipo según corresponda
+    -- Apply the type change accordingly
     IF tipo_id = 'uuid' THEN
         ALTER TABLE clases_grabadas ALTER COLUMN curso_id TYPE UUID USING curso_id::uuid;
     ELSE
@@ -37,17 +39,12 @@ BEGIN
     END IF;
 END $$;
 
--- Re-agregar la Foreign Key apuntando a cursos(id)
-ALTER TABLE clases_grabadas ADD CONSTRAINT clases_grabadas_curso_id_fkey 
+-- 3. RE-ADD THE FOREIGN KEY CONSTRAINT
+ALTER TABLE clases_grabadas ADD CONSTRAINT clases_grabadas_curso_id_fkey
 FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE CASCADE;
 
--- 2. CORREGIR POLÍTICAS RLS
-DROP POLICY IF EXISTS "Alumnos pueden ver clases de sus cursos" ON clases_grabadas;
-DROP POLICY IF EXISTS "Profesores pueden gestionar clases de sus cursos" ON clases_grabadas;
-DROP POLICY IF EXISTS "Administradores pueden ver todo" ON clases_grabadas;
-DROP POLICY IF EXISTS "Profesores pueden gestionar sus clases" ON clases_grabadas;
-
--- Política: Alumnos pueden ver clases si están inscritos y activos
+-- 4. RE-CREATE RLS POLICIES
+-- Policy: Students can view classes for their enrolled and accepted courses
 CREATE POLICY "Alumnos pueden ver clases de sus cursos" ON clases_grabadas
   FOR SELECT
   USING (
@@ -55,21 +52,22 @@ CREATE POLICY "Alumnos pueden ver clases de sus cursos" ON clases_grabadas
       SELECT 1 FROM cursos_alumnos
       WHERE cursos_alumnos.curso_id::text = clases_grabadas.curso_id::text
       AND cursos_alumnos.user_id = auth.uid()
-      AND cursos_alumnos.estado = 'activo'
+      AND cursos_alumnos.estado = 'aceptada'
     )
   );
 
--- Política: Administradores (por email)
+-- Policy: Administrators can do anything
 CREATE POLICY "Administradores pueden ver todo" ON clases_grabadas
   FOR ALL
   USING (
-    auth.jwt() ->> 'email' IN (
-      'admin@plataforma.com',
-      'leonardo@example.com'
+    EXISTS (
+      SELECT 1 FROM usuarios
+      WHERE usuarios.id = auth.uid()
+      AND usuarios.role = 'admin'
     )
   );
 
--- Política: Profesores (si su email coincide con el campo profesor del curso)
+-- Policy: Teachers can manage their own classes
 CREATE POLICY "Profesores pueden gestionar sus clases" ON clases_grabadas
   FOR ALL
   USING (
@@ -77,12 +75,12 @@ CREATE POLICY "Profesores pueden gestionar sus clases" ON clases_grabadas
       SELECT 1 FROM cursos
       WHERE cursos.id = clases_grabadas.curso_id
       AND (
-        cursos.profesor = auth.jwt() ->> 'email'
+        cursos.profesor = auth.uid()::text
       )
     )
   );
 
--- 3. Asegurar columnas de control
+-- 5. ENSURE ALL CONTROL COLUMNS EXIST
 ALTER TABLE clases_grabadas ADD COLUMN IF NOT EXISTS es_activo BOOLEAN DEFAULT true;
 ALTER TABLE clases_grabadas ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT true;
 ALTER TABLE clases_grabadas ADD COLUMN IF NOT EXISTS orden INTEGER DEFAULT 0;

@@ -11,10 +11,10 @@ CREATE POLICY "Alumnos pueden ver clases de sus cursos" ON clases_grabadas
   FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM inscripciones
-      WHERE inscripciones.curso_id = clases_grabadas.curso_id
-      AND inscripciones.alumno_id = auth.uid()
-      AND inscripciones.estado = 'aceptada'
+      SELECT 1 FROM cursos_alumnos
+      WHERE cursos_alumnos.curso_id = clases_grabadas.curso_id
+      AND cursos_alumnos.user_id = auth.uid()
+      AND cursos_alumnos.estado = 'aceptada'
     )
   );
 
@@ -24,7 +24,7 @@ CREATE POLICY "Profesores pueden gestionar clases de sus cursos" ON clases_graba
     EXISTS (
       SELECT 1 FROM cursos
       WHERE cursos.id = clases_grabadas.curso_id
-      AND cursos.profesor_id = auth.uid()
+      AND cursos.profesor = auth.uid()::text
     )
   );
 
@@ -34,6 +34,6 @@ CREATE POLICY "Administradores pueden ver todo" ON clases_grabadas
     EXISTS (
       SELECT 1 FROM usuarios
       WHERE usuarios.id = auth.uid()
-      AND usuarios.rol = 'admin'
+      AND usuarios.role = 'admin'
     )
   );

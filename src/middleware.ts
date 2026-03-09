@@ -1,11 +1,11 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import type { Database } from './lib/database.types' // Importa el mapa REAL de la base de datos
+import type { Database } from './lib/database.types'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
 
-  const supabase = createServerClient<Database>( // Cliente consciente de los tipos
+  const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -38,16 +38,43 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  // 2. SI EL USUARIO ESTÁ LOGUEADO
-  // CORREGIDO: Leer de la tabla 'usuarios'
-  const { data: profile } = await supabase.from('usuarios').select('role, status').eq('id', session.user.id).single()
+  // 2. SI EL USUARIO ESTÁ LOGUEADO, ASEGURAR QUE TIENE UN PERFIL
+  let { data: profile } = await supabase.from('usuarios').select('role, status').eq('id', session.user.id).single();
 
+  // SI EL PERFIL NO EXISTE, LO CREAMOS AUTOMÁTICAMENTE
   if (!profile) {
-    await supabase.auth.signOut()
-    return NextResponse.redirect(new URL('/auth?error=profile_not_found', request.url))
+    const isAdmin = session.user.email === process.env.ADMIN_EMAIL;
+
+    const { data: newProfile, error: insertError } = await supabase
+      .from('usuarios')
+      .insert({
+        id: session.user.id,
+        email: session.user.email,
+        nombre: session.user.user_metadata.nombre || '',
+        apellido: session.user.user_metadata.apellido || '',
+        role: isAdmin ? 'admin' : 'alumno',
+        status: 'activo' // Los usuarios autogenerados empiezan como activos
+      })
+      .select('role, status')
+      .single();
+
+    if (insertError) {
+      console.error('FATAL: Error creating profile after login:', insertError);
+      await supabase.auth.signOut();
+      return NextResponse.redirect(new URL('/auth?error=profile_creation_failed', request.url));
+    }
+    
+    profile = newProfile; // Usamos el perfil recién creado
   }
 
+  // Si a pesar de todo, el perfil sigue sin existir, es un error grave.
+  if (!profile) {
+    await supabase.auth.signOut();
+    return NextResponse.redirect(new URL('/auth?error=fatal_profile_error', request.url));
+  }
+  
   const { role, status } = profile;
+
 
   // Regla A: Si un usuario logueado está en una página pública, redirigirlo.
   if (publicRoutes.includes(pathname)) {

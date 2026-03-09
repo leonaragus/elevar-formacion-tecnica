@@ -1,10 +1,8 @@
--- SOLUCIÓN DEFINITIVA V6: Corregir tipos y Políticas en CURSOS (CRÍTICO)
--- Copiar y pegar todo este bloque en el Editor SQL de Supabase
+-- SOLUCIÓN FINAL V7.1: Corregir tipos con CASTING EXPLÍCITO (Estandarizado a UID)
 
 BEGIN;
 
--- 1. Eliminar políticas problemáticas en la tabla 'cursos'
--- Si alguna policy compara 'id' con auth.uid() directamente, causará error de UUID
+-- 1. Eliminar TODAS las políticas posibles que bloquean o causan errores
 DROP POLICY IF EXISTS "Enable read access for all users" ON cursos;
 DROP POLICY IF EXISTS "Enable insert for authenticated users only" ON cursos;
 DROP POLICY IF EXISTS "Enable update for users based on email" ON cursos;
@@ -12,89 +10,62 @@ DROP POLICY IF EXISTS "Enable delete for users based on email" ON cursos;
 DROP POLICY IF EXISTS "Public read access" ON cursos;
 DROP POLICY IF EXISTS "Admin all access" ON cursos;
 DROP POLICY IF EXISTS "Profesores ven sus cursos" ON cursos;
+DROP POLICY IF EXISTS "Admins y Profesores gestionan cursos" ON cursos;
 
--- 2. Eliminar políticas en tablas dependientes
 DROP POLICY IF EXISTS "Alumnos pueden ver clases de sus cursos" ON clases_grabadas;
 DROP POLICY IF EXISTS "Profesores pueden gestionar clases de sus cursos" ON clases_grabadas;
 DROP POLICY IF EXISTS "Administradores pueden ver todo" ON clases_grabadas;
+DROP POLICY IF EXISTS "Profesores pueden gestionar sus clases" ON clases_grabadas;
 DROP POLICY IF EXISTS "Profesores gestionan sus clases" ON clases_grabadas;
+DROP POLICY IF EXISTS "Admins gestionan todo" ON clases_grabadas;
+
 DROP POLICY IF EXISTS "Public read access" ON mensajes;
 DROP POLICY IF EXISTS "Admin all access" ON mensajes;
 
--- 3. FORZAR cambio de tipo a TEXT en tablas dependientes
--- Esto es necesario porque si quedan como UUID, las consultas fallarán
+-- 2. Corrección SEGURA de tipos (sin cambios)
 DO $$ 
-DECLARE
-    tipo_id_curso text;
 BEGIN
-    SELECT data_type INTO tipo_id_curso 
-    FROM information_schema.columns 
-    WHERE table_name = 'cursos' AND column_name = 'id';
-
-    RAISE NOTICE 'Tipo de ID de cursos detectado: %', tipo_id_curso;
-
-    -- --- CORRECCIÓN TABLA MENSAJES ---
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'mensajes') THEN
         ALTER TABLE mensajes DROP CONSTRAINT IF EXISTS mensajes_curso_id_fkey;
-        
-        -- Si es UUID, lo convertimos a TEXT
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mensajes' AND column_name = 'curso_id' AND data_type = 'uuid') THEN
-            ALTER TABLE mensajes ALTER COLUMN curso_id TYPE TEXT USING curso_id::text;
-        END IF;
-
-        -- Asegurar FK
-        DELETE FROM mensajes WHERE curso_id NOT IN (SELECT id FROM cursos);
+        DELETE FROM mensajes WHERE curso_id::text NOT IN (SELECT id::text FROM cursos);
+        ALTER TABLE mensajes ALTER COLUMN curso_id TYPE TEXT USING curso_id::text;
         ALTER TABLE mensajes ADD CONSTRAINT mensajes_curso_id_fkey 
             FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE CASCADE;
     END IF;
 
-    -- --- CORRECCIÓN TABLA CLASES_GRABADAS ---
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'clases_grabadas') THEN
         ALTER TABLE clases_grabadas DROP CONSTRAINT IF EXISTS clases_grabadas_curso_id_fkey;
-        
-        -- Si es UUID, lo convertimos a TEXT
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'clases_grabadas' AND column_name = 'curso_id' AND data_type = 'uuid') THEN
-            ALTER TABLE clases_grabadas ALTER COLUMN curso_id TYPE TEXT USING curso_id::text;
-        END IF;
-
-        -- Asegurar FK
-        DELETE FROM clases_grabadas WHERE curso_id NOT IN (SELECT id FROM cursos);
+        DELETE FROM clases_grabadas WHERE curso_id::text NOT IN (SELECT id::text FROM cursos);
+        ALTER TABLE clases_grabadas ALTER COLUMN curso_id TYPE TEXT USING curso_id::text;
         ALTER TABLE clases_grabadas ADD CONSTRAINT clases_grabadas_curso_id_fkey 
             FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE CASCADE;
     END IF;
 END $$;
 
--- 4. Recrear Políticas RLS para 'cursos' (SEGURAS DE TIPOS)
--- Importante: castear auth.uid() a text para comparar con id
+-- 3. Recrear Políticas RLS (ESTANDARIZADO A UID)
 
+-- A. Cursos
 CREATE POLICY "Public read access" ON cursos FOR SELECT USING (true);
 
--- Admin/Profesor policy: verificar email o metadata, NO usar uuid directo contra id
 CREATE POLICY "Admins y Profesores gestionan cursos" ON cursos
   FOR ALL
   USING (
-    (auth.jwt() ->> 'email' IN ('admin@plataforma.com', 'leonardo@example.com'))
-    OR
     ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
     OR
-    ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin')
-    OR
-    (profesor = auth.jwt() ->> 'email') -- Comparación por email (segura)
+    (profesor = auth.uid()::text) -- Estandarizado a UID
   );
 
--- 5. Recrear Políticas RLS para dependencias
-
--- Políticas para 'mensajes'
+-- B. Mensajes
 CREATE POLICY "Public read access" ON mensajes FOR SELECT USING (true);
 CREATE POLICY "Admin all access" ON mensajes FOR ALL USING (true);
 
--- Políticas para 'clases_grabadas'
+-- C. Clases Grabadas
 CREATE POLICY "Alumnos pueden ver clases de sus cursos" ON clases_grabadas
   FOR SELECT
   USING (
     EXISTS (
       SELECT 1 FROM cursos_alumnos
-      WHERE cursos_alumnos.curso_id = clases_grabadas.curso_id -- Ambos son TEXT ahora
+      WHERE cursos_alumnos.curso_id = clases_grabadas.curso_id
       AND cursos_alumnos.user_id = auth.uid()
       AND cursos_alumnos.estado IN ('activo', 'aceptada', 'pendiente')
     )
@@ -105,19 +76,15 @@ CREATE POLICY "Profesores gestionan sus clases" ON clases_grabadas
   USING (
     EXISTS (
       SELECT 1 FROM cursos
-      WHERE cursos.id = clases_grabadas.curso_id -- Ambos son TEXT
-      AND cursos.profesor = auth.jwt() ->> 'email'
+      WHERE cursos.id = clases_grabadas.curso_id
+      AND cursos.profesor = auth.uid()::text -- Estandarizado a UID
     )
   );
 
 CREATE POLICY "Admins gestionan todo" ON clases_grabadas
   FOR ALL
   USING (
-    (auth.jwt() ->> 'email' IN ('admin@plataforma.com', 'leonardo@example.com'))
-    OR
     ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
-    OR
-    ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin')
   );
 
 COMMIT;

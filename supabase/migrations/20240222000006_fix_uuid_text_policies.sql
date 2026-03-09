@@ -1,17 +1,12 @@
--- SOLUCIÓN FINAL V3: Corregir tipos UUID/TEXT y Políticas RLS
+-- SOLUCIÓN COMPLETA: Corregir tipos UUID/TEXT y Políticas RLS
 -- Copiar y pegar todo este bloque en el Editor SQL de Supabase
 
 BEGIN;
 
--- 1. Eliminar TODAS las políticas posibles que bloquean el cambio de tipo
--- Tabla clases_grabadas
+-- 1. Eliminar políticas que bloquean el cambio de tipo
 DROP POLICY IF EXISTS "Alumnos pueden ver clases de sus cursos" ON clases_grabadas;
 DROP POLICY IF EXISTS "Profesores pueden gestionar clases de sus cursos" ON clases_grabadas;
 DROP POLICY IF EXISTS "Administradores pueden ver todo" ON clases_grabadas;
-DROP POLICY IF EXISTS "Profesores pueden gestionar sus clases" ON clases_grabadas;
-DROP POLICY IF EXISTS "Profesores y Admins gestionan clases" ON clases_grabadas;
-
--- Tabla mensajes
 DROP POLICY IF EXISTS "Public read access" ON mensajes;
 DROP POLICY IF EXISTS "Admin all access" ON mensajes;
 
@@ -80,18 +75,23 @@ CREATE POLICY "Alumnos pueden ver clases de sus cursos" ON clases_grabadas
       SELECT 1 FROM cursos_alumnos
       WHERE cursos_alumnos.curso_id::text = clases_grabadas.curso_id::text
       AND cursos_alumnos.user_id = auth.uid()
-      AND cursos_alumnos.estado IN ('activo', 'aceptada', 'pendiente')
+      AND cursos_alumnos.estado = 'aceptada'
     )
   );
 
--- B. Profesores/Admins: Acceso amplio si tienen rol o son el profesor (Tabla 'usuarios')
+-- B. Profesores/Admins: Acceso unificado y estandarizado
 CREATE POLICY "Profesores y Admins gestionan clases" ON clases_grabadas
   FOR ALL
   USING (
     EXISTS (
-      SELECT 1 FROM usuarios
-      WHERE usuarios.id = auth.uid()
-      AND (usuarios.rol = 'admin' OR usuarios.rol = 'profesor')
+      SELECT 1 FROM cursos
+      WHERE cursos.id::text = clases_grabadas.curso_id::text AND
+      cursos.profesor = auth.uid()::text
+    ) OR
+    EXISTS (
+        SELECT 1 FROM usuarios
+        WHERE usuarios.id = auth.uid() AND
+        usuarios.role = 'admin'
     )
   );
 

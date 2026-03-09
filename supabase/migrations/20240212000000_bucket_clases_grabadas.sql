@@ -20,7 +20,7 @@ CREATE POLICY "Profesores y admin pueden subir videos" ON storage.objects
       EXISTS (
         SELECT 1 FROM usuarios
         WHERE usuarios.id = auth.uid()
-        AND usuarios.rol IN ('profesor', 'admin')
+        AND usuarios.role IN ('profesor', 'admin')
       )
     )
   );
@@ -34,7 +34,7 @@ CREATE POLICY "Profesores y admin pueden actualizar videos" ON storage.objects
       EXISTS (
         SELECT 1 FROM usuarios
         WHERE usuarios.id = auth.uid()
-        AND usuarios.rol IN ('profesor', 'admin')
+        AND usuarios.role IN ('profesor', 'admin')
       )
     )
   );
@@ -48,7 +48,7 @@ CREATE POLICY "Profesores y admin pueden eliminar videos" ON storage.objects
       EXISTS (
         SELECT 1 FROM usuarios
         WHERE usuarios.id = auth.uid()
-        AND usuarios.rol IN ('profesor', 'admin')
+        AND usuarios.role IN ('profesor', 'admin')
       )
     )
   );

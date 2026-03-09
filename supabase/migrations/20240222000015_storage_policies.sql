@@ -10,6 +10,12 @@ DROP POLICY IF EXISTS "Public Access" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated Upload" ON storage.objects;
 DROP POLICY IF EXISTS "Admin Delete" ON storage.objects;
 
+-- Drop SPECIFIC policies for curso_meta to guarantee idempotency
+DROP POLICY IF EXISTS "Public Access curso_meta" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated Upload curso_meta" ON storage.objects;
+DROP POLICY IF EXISTS "Admin Update curso_meta" ON storage.objects;
+DROP POLICY IF EXISTS "Admin Delete curso_meta" ON storage.objects;
+
 -- Create policies for curso_meta
 CREATE POLICY "Public Access curso_meta"
 ON storage.objects FOR SELECT

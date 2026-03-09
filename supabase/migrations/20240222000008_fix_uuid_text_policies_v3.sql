@@ -1,4 +1,4 @@
--- SOLUCIÓN FINAL V5: Corregir tipos y Políticas (Corregido nombre de columna profesor)
+-- SOLUCIÓN FINAL V3: Corregir tipos UUID/TEXT y Políticas RLS
 -- Copiar y pegar todo este bloque en el Editor SQL de Supabase
 
 BEGIN;
@@ -10,7 +10,6 @@ DROP POLICY IF EXISTS "Profesores pueden gestionar clases de sus cursos" ON clas
 DROP POLICY IF EXISTS "Administradores pueden ver todo" ON clases_grabadas;
 DROP POLICY IF EXISTS "Profesores pueden gestionar sus clases" ON clases_grabadas;
 DROP POLICY IF EXISTS "Profesores y Admins gestionan clases" ON clases_grabadas;
-DROP POLICY IF EXISTS "Profesores gestionan sus clases" ON clases_grabadas; -- Nueva variante del intento anterior
 
 -- Tabla mensajes
 DROP POLICY IF EXISTS "Public read access" ON mensajes;
@@ -65,7 +64,7 @@ BEGIN
     END IF;
 END $$;
 
--- 3. Recrear Políticas RLS (Usando columnas confirmadas)
+-- 3. Recrear Políticas RLS (Actualizadas para usar tablas correctas)
 
 -- Políticas para 'mensajes'
 CREATE POLICY "Public read access" ON mensajes FOR SELECT USING (true);
@@ -73,7 +72,7 @@ CREATE POLICY "Admin all access" ON mensajes FOR ALL USING (true);
 
 -- Políticas para 'clases_grabadas'
 
--- A. Alumnos: Usamos 'cursos_alumnos' que sabemos que existe
+-- A. Alumnos: Usamos 'cursos_alumnos' que es la tabla estándar en este proyecto
 CREATE POLICY "Alumnos pueden ver clases de sus cursos" ON clases_grabadas
   FOR SELECT
   USING (
@@ -81,30 +80,24 @@ CREATE POLICY "Alumnos pueden ver clases de sus cursos" ON clases_grabadas
       SELECT 1 FROM cursos_alumnos
       WHERE cursos_alumnos.curso_id::text = clases_grabadas.curso_id::text
       AND cursos_alumnos.user_id = auth.uid()
-      AND cursos_alumnos.estado IN ('activo', 'aceptada', 'pendiente')
+      AND cursos_alumnos.estado = 'aceptada'
     )
   );
 
--- B. Profesores: Basado en la propiedad del curso (tabla 'cursos', columna 'profesor' que es email)
-CREATE POLICY "Profesores gestionan sus clases" ON clases_grabadas
+-- B. Profesores/Admins: Acceso unificado y estandarizado
+CREATE POLICY "Profesores y Admins gestionan clases" ON clases_grabadas
   FOR ALL
   USING (
     EXISTS (
       SELECT 1 FROM cursos
-      WHERE cursos.id::text = clases_grabadas.curso_id::text
-      AND cursos.profesor = auth.jwt() ->> 'email'
+      WHERE cursos.id::text = clases_grabadas.curso_id::text AND
+      cursos.profesor = auth.uid()::text
+    ) OR
+    EXISTS (
+        SELECT 1 FROM usuarios
+        WHERE usuarios.id = auth.uid() AND
+        usuarios.role = 'admin'
     )
-  );
-
--- C. Admins/Staff: Fallback usando metadatos de usuario o email
-CREATE POLICY "Admins gestionan todo" ON clases_grabadas
-  FOR ALL
-  USING (
-    (auth.jwt() ->> 'email' IN ('admin@plataforma.com', 'leonardo@example.com'))
-    OR
-    ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
-    OR
-    ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin')
   );
 
 COMMIT;

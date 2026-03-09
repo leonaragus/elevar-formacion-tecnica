@@ -1,9 +1,9 @@
--- Agregar campo para controlar el orden y límite de videos
-ALTER TABLE clases_grabadas ADD COLUMN orden INTEGER DEFAULT 1;
-ALTER TABLE clases_grabadas ADD COLUMN es_activo BOOLEAN DEFAULT true;
+-- Agregar campo para controlar el orden y límite de videos (versión idempotente)
+ALTER TABLE clases_grabadas ADD COLUMN IF NOT EXISTS orden INTEGER DEFAULT 1;
+ALTER TABLE clases_grabadas ADD COLUMN IF NOT EXISTS es_activo BOOLEAN DEFAULT true;
 
--- Índice para ordenar por fecha
-CREATE INDEX idx_clases_grabadas_orden ON clases_grabadas(curso_id, orden DESC);
+-- Índice para ordenar por fecha (si no existe)
+CREATE INDEX IF NOT EXISTS idx_clases_grabadas_orden ON clases_grabadas(curso_id, orden DESC);
 
 -- Función para mantener solo los 2 videos más recientes por curso
 CREATE OR REPLACE FUNCTION mantener_limite_videos()
@@ -43,6 +43,9 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Eliminar el trigger si existe antes de crearlo
+DROP TRIGGER IF EXISTS trigger_mantener_limite_videos ON clases_grabadas;
 
 -- Trigger que se ejecuta después de insertar un nuevo video
 CREATE TRIGGER trigger_mantener_limite_videos

@@ -10,6 +10,9 @@ create table if not exists mensajes (
 -- Enable RLS
 alter table mensajes enable row level security;
 
--- Policies
+-- Policies (Idempotent)
+DROP POLICY IF EXISTS "Public read access" ON mensajes;
+DROP POLICY IF EXISTS "Admin all access" ON mensajes;
+
 create policy "Public read access" on mensajes for select using (true);
 create policy "Admin all access" on mensajes for all using (true);

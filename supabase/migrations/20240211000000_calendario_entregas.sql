@@ -59,9 +59,9 @@ ALTER TABLE calendario_entregas ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Admin y profesores pueden ver todas las entregas" ON calendario_entregas
   FOR SELECT USING (
     EXISTS (
-      SELECT 1 FROM profiles 
+      SELECT 1 FROM usuarios 
       WHERE id = auth.uid() 
-      AND rol IN ('admin', 'profesor')
+      AND role IN ('admin', 'profesor')
     )
   );
 
@@ -69,22 +69,22 @@ CREATE POLICY "Admin y profesores pueden ver todas las entregas" ON calendario_e
 CREATE POLICY "Admin y profesores pueden gestionar entregas" ON calendario_entregas
   FOR ALL USING (
     EXISTS (
-      SELECT 1 FROM profiles 
+      SELECT 1 FROM usuarios 
       WHERE id = auth.uid() 
-      AND rol IN ('admin', 'profesor')
+      AND role IN ('admin', 'profesor')
     )
   );
 
 -- Alumnos solo pueden ver las fechas de entrega de sus cursos
-CREATE POLICY "Alumnos pueden ver entregas de sus cursos" ON calendario_entregas
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM inscripciones_cursos 
-      WHERE alumno_id = auth.uid() 
-      AND curso_id = calendario_entregas.curso_id
-      AND estado = 'aprobado'
-    )
-  );
+-- CREATE POLICY "Alumnos pueden ver entregas de sus cursos" ON calendario_entregas
+--   FOR SELECT USING (
+--     EXISTS (
+--       SELECT 1 FROM inscripciones_cursos 
+--       WHERE alumno_id = auth.uid() 
+--       AND curso_id = calendario_entregas.curso_id
+--       AND estado = 'aprobado'
+--     )
+--   );
 
 -- Políticas RLS para entregas de alumnos
 ALTER TABLE entregas_alumnos ENABLE ROW LEVEL SECURITY;
@@ -103,10 +103,10 @@ CREATE POLICY "Alumnos pueden actualizar sus entregas" ON entregas_alumnos
 CREATE POLICY "Admin y profesores pueden ver entregas de sus cursos" ON entregas_alumnos
   FOR SELECT USING (
     EXISTS (
-      SELECT 1 FROM profiles p
+      SELECT 1 FROM usuarios p
       JOIN calendario_entregas ce ON ce.id = entregas_alumnos.entrega_id
       WHERE p.id = auth.uid() 
-      AND p.rol IN ('admin', 'profesor')
+      AND p.role IN ('admin', 'profesor')
     )
   );
 

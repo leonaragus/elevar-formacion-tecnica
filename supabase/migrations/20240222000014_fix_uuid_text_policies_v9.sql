@@ -1,10 +1,8 @@
--- SOLUCIÓN FINAL V8: Corrección de Sintaxis (DO block)
--- Este script corrige el error de sintaxis "IF" encapsulando la lógica en un bloque DO
--- Copiar y pegar todo este bloque en el Editor SQL de Supabase
+-- SOLUCIÓN FINAL V9.1: Detección Automática de FK (Estandarizado a UID)
 
 BEGIN;
 
--- 1. Eliminar políticas de seguridad para evitar bloqueos
+-- 1. Eliminar políticas para evitar bloqueos
 DROP POLICY IF EXISTS "Enable read access for all users" ON cursos;
 DROP POLICY IF EXISTS "Enable insert for authenticated users only" ON cursos;
 DROP POLICY IF EXISTS "Enable update for users based on email" ON cursos;
@@ -23,48 +21,62 @@ DROP POLICY IF EXISTS "Admins gestionan todo" ON clases_grabadas;
 DROP POLICY IF EXISTS "Public read access" ON mensajes;
 DROP POLICY IF EXISTS "Admin all access" ON mensajes;
 
--- 2. Eliminar restricciones de Clave Foránea (FK) existentes
-ALTER TABLE mensajes DROP CONSTRAINT IF EXISTS mensajes_curso_id_fkey;
-ALTER TABLE clases_grabadas DROP CONSTRAINT IF EXISTS clases_grabadas_curso_id_fkey;
-ALTER TABLE cursos_alumnos DROP CONSTRAINT IF EXISTS cursos_alumnos_curso_id_fkey;
-ALTER TABLE intereses DROP CONSTRAINT IF EXISTS intereses_course_id_fkey;
+-- 2. Detección y eliminación automática de constraints + Conversión
+DO $$ 
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (
+        SELECT 
+            tc.table_schema, 
+            tc.table_name, 
+            kcu.column_name, 
+            tc.constraint_name
+        FROM information_schema.table_constraints AS tc 
+        JOIN information_schema.key_column_usage AS kcu
+          ON tc.constraint_name = kcu.constraint_name
+          AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage AS ccu
+          ON ccu.constraint_name = tc.constraint_name
+          AND ccu.table_schema = tc.table_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY' 
+          AND ccu.table_name = 'cursos' 
+          AND ccu.column_name = 'id'
+    ) LOOP
+        EXECUTE format('ALTER TABLE %I.%I DROP CONSTRAINT IF EXISTS %I', r.table_schema, r.table_name, r.constraint_name);
+        EXECUTE format('ALTER TABLE %I.%I ALTER COLUMN %I TYPE TEXT USING %I::text', r.table_schema, r.table_name, r.column_name, r.column_name);
+        EXECUTE format('DELETE FROM %I.%I WHERE %I::text NOT IN (SELECT id::text FROM cursos)', r.table_schema, r.table_name, r.column_name);
+    END LOOP;
+END $$;
 
 -- 3. CAMBIO CRÍTICO: Convertir cursos.id a TEXTO
 ALTER TABLE cursos ALTER COLUMN id TYPE TEXT USING id::text;
 
--- 4. Convertir tablas dependientes a TEXTO y limpiar datos huérfanos (DENTRO DE UN BLOQUE DO)
+-- 4. Restaurar FKs
 DO $$ 
 BEGIN
-    -- Mensajes
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'mensajes') THEN
-        ALTER TABLE mensajes ALTER COLUMN curso_id TYPE TEXT USING curso_id::text;
-        DELETE FROM mensajes WHERE curso_id NOT IN (SELECT id FROM cursos);
         ALTER TABLE mensajes ADD CONSTRAINT mensajes_curso_id_fkey FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE CASCADE;
     END IF;
 
-    -- Clases Grabadas
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'clases_grabadas') THEN
-        ALTER TABLE clases_grabadas ALTER COLUMN curso_id TYPE TEXT USING curso_id::text;
-        DELETE FROM clases_grabadas WHERE curso_id NOT IN (SELECT id FROM cursos);
         ALTER TABLE clases_grabadas ADD CONSTRAINT clases_grabadas_curso_id_fkey FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE CASCADE;
     END IF;
 
-    -- Cursos Alumnos (Inscripciones)
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'cursos_alumnos') THEN
-        ALTER TABLE cursos_alumnos ALTER COLUMN curso_id TYPE TEXT USING curso_id::text;
-        DELETE FROM cursos_alumnos WHERE curso_id NOT IN (SELECT id FROM cursos);
         ALTER TABLE cursos_alumnos ADD CONSTRAINT cursos_alumnos_curso_id_fkey FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE CASCADE;
     END IF;
 
-    -- Intereses
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'intereses') THEN
-        ALTER TABLE intereses ALTER COLUMN course_id TYPE TEXT USING course_id::text;
-        DELETE FROM intereses WHERE course_id NOT IN (SELECT id FROM cursos);
         ALTER TABLE intereses ADD CONSTRAINT intereses_course_id_fkey FOREIGN KEY (course_id) REFERENCES cursos(id) ON DELETE CASCADE;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'materiales') THEN
+        ALTER TABLE materiales ADD CONSTRAINT materiales_curso_id_fkey FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE CASCADE;
     END IF;
 END $$;
 
--- 5. Recrear Políticas RLS (Ahora seguras porque todo es TEXTO)
+-- 5. Recrear Políticas RLS (ESTANDARIZADO A UID)
 
 -- A. Cursos
 CREATE POLICY "Public read access" ON cursos FOR SELECT USING (true);
@@ -72,13 +84,9 @@ CREATE POLICY "Public read access" ON cursos FOR SELECT USING (true);
 CREATE POLICY "Admins y Profesores gestionan cursos" ON cursos
   FOR ALL
   USING (
-    (auth.jwt() ->> 'email' IN ('admin@plataforma.com', 'leonardo@example.com'))
-    OR
     ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
     OR
-    ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin')
-    OR
-    (profesor = auth.jwt() ->> 'email')
+    (profesor = auth.uid()::text) -- Estandarizado a UID
   );
 
 -- B. Mensajes
@@ -103,18 +111,14 @@ CREATE POLICY "Profesores gestionan sus clases" ON clases_grabadas
     EXISTS (
       SELECT 1 FROM cursos
       WHERE cursos.id = clases_grabadas.curso_id
-      AND cursos.profesor = auth.jwt() ->> 'email'
+      AND cursos.profesor = auth.uid()::text -- Estandarizado a UID
     )
   );
 
 CREATE POLICY "Admins gestionan todo" ON clases_grabadas
   FOR ALL
   USING (
-    (auth.jwt() ->> 'email' IN ('admin@plataforma.com', 'leonardo@example.com'))
-    OR
     ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
-    OR
-    ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin')
   );
 
 COMMIT;

@@ -2,7 +2,7 @@
 -- Esta migración agrega soporte para videos descargados con transcripciones
 
 -- Tabla de clases grabadas
-CREATE TABLE clases_grabadas (
+CREATE TABLE IF NOT EXISTS clases_grabadas (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   curso_id UUID NOT NULL REFERENCES cursos(id) ON DELETE CASCADE,
   titulo VARCHAR(255) NOT NULL,
@@ -28,44 +28,47 @@ CREATE TABLE clases_grabadas (
 );
 
 -- Índices para búsqueda rápida
-CREATE INDEX idx_clases_grabadas_curso_id ON clases_grabadas(curso_id);
-CREATE INDEX idx_clases_grabadas_fecha ON clases_grabadas(fecha_clase);
-CREATE INDEX idx_clases_grabadas_activo ON clases_grabadas(activo);
+CREATE INDEX IF NOT EXISTS idx_clases_grabadas_curso_id ON clases_grabadas(curso_id);
+CREATE INDEX IF NOT EXISTS idx_clases_grabadas_fecha ON clases_grabadas(fecha_clase);
+CREATE INDEX IF NOT EXISTS idx_clases_grabadas_activo ON clases_grabadas(activo);
 
 -- RLS para clases grabadas (solo usuarios del curso pueden ver)
 ALTER TABLE clases_grabadas ENABLE ROW LEVEL SECURITY;
 
 -- Política: Los alumnos inscritos en el curso pueden ver las clases grabadas
+DROP POLICY IF EXISTS "Alumnos pueden ver clases de sus cursos" ON clases_grabadas;
 CREATE POLICY "Alumnos pueden ver clases de sus cursos" ON clases_grabadas
   FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM inscripciones
-      WHERE inscripciones.curso_id = clases_grabadas.curso_id
-      AND inscripciones.alumno_id = auth.uid()
-      AND inscripciones.estado = 'aceptada'
+      SELECT 1 FROM cursos_alumnos
+      WHERE cursos_alumnos.curso_id = clases_grabadas.curso_id
+      AND cursos_alumnos.user_id = auth.uid()
+      AND cursos_alumnos.estado = 'aceptada'
     )
   );
 
 -- Política: Los profesores del curso pueden gestionar clases grabadas
+DROP POLICY IF EXISTS "Profesores pueden gestionar clases de sus cursos" ON clases_grabadas;
 CREATE POLICY "Profesores pueden gestionar clases de sus cursos" ON clases_grabadas
   FOR ALL
   USING (
     EXISTS (
       SELECT 1 FROM cursos
       WHERE cursos.id = clases_grabadas.curso_id
-      AND cursos.profesor_id = auth.uid()
+      AND cursos.profesor = auth.uid()::text
     )
   );
 
 -- Política: Los administradores pueden ver todo
+DROP POLICY IF EXISTS "Administradores pueden ver todo" ON clases_grabadas;
 CREATE POLICY "Administradores pueden ver todo" ON clases_grabadas
   FOR ALL
   USING (
     EXISTS (
       SELECT 1 FROM usuarios
       WHERE usuarios.id = auth.uid()
-      AND usuarios.rol = 'admin'
+      AND usuarios.role = 'admin'
     )
   );
 
@@ -79,6 +82,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger para updated_at
+DROP TRIGGER IF EXISTS update_clases_grabadas_updated_at ON clases_grabadas;
 CREATE TRIGGER update_clases_grabadas_updated_at
   BEFORE UPDATE ON clases_grabadas
   FOR EACH ROW
