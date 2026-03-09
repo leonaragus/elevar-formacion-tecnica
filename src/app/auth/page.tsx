@@ -1,23 +1,28 @@
 'use client';
 
 import { useState, useEffect, Suspense } from "react";
-import { Mail, LogIn, Shield, CheckCircle, AlertCircle } from "lucide-react";
+import { Mail, LogIn, Shield, CheckCircle, AlertCircle, Lock } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import Link from "next/link";
 
 function AuthForm() {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const { signIn } = useAuth();
+  const router = useRouter();
 
   const searchParams = useSearchParams();
   useEffect(() => {
     const err = searchParams?.get('error');
+    const message = searchParams?.get('message');
     if (err === 'pendiente') {
-      setError("Tu solicitud de inscripción está pendiente. Recibirás una notificación cuando sea aprobada.");
+      setError("Tu cuenta está pendiente de aprobación por un administrador.");
+    }
+    if (message === 'check_email') {
+        setError("¡Gracias por registrarte! Por favor, revisa tu correo para confirmar tu cuenta antes de iniciar sesión.");
     }
   }, [searchParams]);
 
@@ -25,13 +30,13 @@ function AuthForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setMessage(null);
 
     try {
-      await signIn(email);
-      setMessage("¡Revisa tu correo! Te hemos enviado un enlace para iniciar sesión. La ventana se puede cerrar.");
+      await signIn(email, password);
+      // El middleware se encargará de la redirección, así que solo limpiamos el error.
+      router.push('/'); // Redirige a la raíz, el middleware decidirá el destino final.
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al enviar el enlace de acceso.");
+      setError(err instanceof Error ? err.message : "Email o contraseña incorrectos. Verifica tus credenciales.");
     } finally {
       setLoading(false);
     }
@@ -48,55 +53,71 @@ function AuthForm() {
         </p>
       </div>
 
-      {message ? (
-        <div className="p-4 rounded-lg flex flex-col items-center gap-3 text-center bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
-          <CheckCircle className="w-12 h-12" />
-          <p className="font-semibold text-lg">¡Enlace enviado!</p>
-          <p className="text-sm">{message}</p>
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Correo electrónico
-            </label>
-            <div className="relative">
-              <Mail className="absolute h-5 w-5 text-gray-400 top-1/2 left-3 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="email"
-                placeholder="tu.email@ejemplo.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                disabled={loading}
-              />
-            </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Correo electrónico
+          </label>
+          <div className="relative">
+            <Mail className="absolute h-5 w-5 text-gray-400 top-1/2 left-3 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="email"
+              placeholder="tu.email@ejemplo.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              disabled={loading}
+            />
           </div>
-          
-          {error && (
-            <div className="p-3 rounded-lg flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
-              <AlertCircle size={20} />
-              <p className="text-sm">{error}</p>
-            </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Contraseña
+          </label>
+          <div className="relative">
+            <Lock className="absolute h-5 w-5 text-gray-400 top-1/2 left-3 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              disabled={loading}
+            />
+          </div>
+        </div>
+        
+        {error && (
+          <div className="p-3 rounded-lg flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+            <AlertCircle size={20} />
+            <p className="text-sm">{error}</p>
+          </div>
+        )}
+        
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-blue-600 text-white py-2.5 px-4 rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 flex items-center justify-center transition-all duration-200"
+        >
+          {loading ? (
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+          ) : (
+            <>
+              <LogIn className="h-5 w-5 mr-2" />
+              Iniciar sesión
+            </>
           )}
-          
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-2.5 px-4 rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 flex items-center justify-center transition-all duration-200"
-          >
-            {loading ? (
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-            ) : (
-              <>
-                <LogIn className="h-5 w-5 mr-2" />
-                Enviar enlace de acceso
-              </>
-            )}
-          </button>
-        </form>
-      )}
+        </button>
+
+         <p className="text-center text-sm text-gray-600 dark:text-gray-400 pt-2">
+            ¿No tienes una cuenta? <Link href="/registro" className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300">Regístrate aquí</Link>
+        </p>
+
+      </form>
+
     </div>
   );
 }
