@@ -1,871 +1,292 @@
 "use client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useState, useEffect, useMemo } from "react";
-import { User, Activity, Users, BookOpen, DollarSign, AlertTriangle, Database, Settings, LogOut, Search, Filter, Download, Trash2, Plus, Edit, Eye, CheckCircle, Clock, XCircle, Upload, ExternalLink } from "lucide-react";
+import { Database, Search, Plus, Trash2, Edit, ExternalLink, AlertTriangle, Users } from "lucide-react";
 import Link from "next/link";
- 
- type CursoRow = {
-   id: string;
-   titulo: string;
-   descripcion: string;
-   duracion: string;
-   modalidad: "presencial" | "virtual" | "semipresencial" | "a distancia";
-   categoria: string;
-   nivel: "inicial" | "intermedio" | "avanzado" | "especializacion";
-   precio: number;
-   estado: "activo" | "inactivo" | "en_desarrollo" | "suspendido";
+
+// Tipos de datos simplificados que coinciden con la nueva API
+type Curso = {
+  id: string;
+  titulo: string;
+  descripcion: string;
+  duracion: string;
+  modalidad: string;
+  categoria: string;
+  nivel: string;
+  precio: number;
+  estado: string;
   imagen: string | null;
+  alumnos_count: number; // Nuevo campo de la API
+};
+
+type Pendiente = {
+  user_id: string;
+  curso_id: string;
   created_at: string;
-   updated_at: string;
- };
- 
- type AlumnoRow = {
-   id: string;
-   nombre: string;
-   apellido: string;
-   email: string;
-   documento: string;
-   telefono: string;
-   curso_id?: string;
-   created_at: string;
- };
- 
- export default function AdminCursosClient() {
-   const [cursos, setCursos] = useState<CursoRow[]>([]);
-   const [alumnos, setAlumnos] = useState<AlumnoRow[]>([]);
-  const [pendientes, setPendientes] = useState<{
-    user_id: string;
-    curso_id: string;
-    estado: string;
-    created_at: string;
-    user_email?: string | null;
-    curso_titulo?: string | null;
-    nombre?: string | null;
-    apellido?: string | null;
-  }[]>([]);
+  user_email: string | null;
+  nombre: string | null;
+  apellido: string | null;
+  curso_titulo: string | null;
+};
+
+export default function AdminCursosClient() {
+  // Estados principales
+  const [cursos, setCursos] = useState<Curso[]>([]);
+  const [pendientes, setPendientes] = useState<Pendiente[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-  const [user, setUser] = useState<any>(null);
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-  const [showDebug, setShowDebug] = useState(false);
- 
-   const [searchTerm, setSearchTerm] = useState("");
-   const [filterEstado, setFilterEstado] = useState("");
-   const [filterCategoria, setFilterCategoria] = useState("");
-   const [filterNivel, setFilterNivel] = useState("");
-   const [currentPage, setCurrentPage] = useState(1);
-   const [itemsPerPage] = useState(10);
- 
-   const [showNew, setShowNew] = useState(false);
-   const [newTitulo, setNewTitulo] = useState("");
-   const [newDescripcion, setNewDescripcion] = useState("");
-   const [newDuracion, setNewDuracion] = useState("");
-   const [newModalidad, setNewModalidad] = useState<"presencial" | "virtual" | "semipresencial" | "a distancia">("virtual");
-   const [newCategoria, setNewCategoria] = useState("");
-   const [newNivel, setNewNivel] = useState<"inicial" | "intermedio" | "avanzado" | "especializacion">("inicial");
-  const [newPrecio, setNewPrecio] = useState<number>(0);
-  const [newPrecioText, setNewPrecioText] = useState<string>("0");
-   const [newEstado, setNewEstado] = useState<"activo" | "inactivo" | "en_desarrollo" | "suspendido">("en_desarrollo");
-  const [newImagen, setNewImagen] = useState("");
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    const file = e.target.files[0];
-    
+  // Estados para UI y filtros
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showNew, setShowNew] = useState(false);
+  const [editingCurso, setEditingCurso] = useState<Curso | null>(null);
+
+  // --- Carga de Datos ---
+  const loadData = async () => {
     try {
-      setUploadingImage(true);
-      
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await fetch("/api/admin/upload-image", {
-        method: "POST",
-        body: formData,
-      });
-
-      const json = await res.json().catch(() => null);
-
-      if (!res.ok || !json?.ok) {
-        throw new Error(json?.error || "Error al subir imagen");
-      }
-
-      setNewImagen(json.url);
-    } catch (error: any) {
-      console.error("Error upload:", error);
-      alert('Error al subir imagen: ' + (error.message || "Error desconocido"));
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
-  const loadCursos = async () => {
-    try {
-      setLoadError(null);
       setLoading(true);
+      setError(null);
 
-      const authResult = (await Promise.race([
-        supabase.auth.getUser(),
-        new Promise((resolve) =>
-          setTimeout(
-            () => resolve({ data: { user: null }, error: { message: "timeout" } }),
-            5000
-          )
-        ),
-      ])) as any;
-
-      const userData = authResult?.data?.user ?? null;
-      const userError = authResult?.error ?? null;
-      if (!userError || userError?.message === "timeout") {
-        setUser(userData);
-      } else {
-        setUser(null);
-      }
-
-      const controllerCursos = new AbortController();
-      const cursosTimeout = setTimeout(() => controllerCursos.abort(), 15000);
-      const res = await fetch(`/api/admin/cursos?t=${Date.now()}`, { cache: "no-store", signal: controllerCursos.signal });
-      clearTimeout(cursosTimeout);
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Error ${res.status}: ${res.statusText} - ${errorText}`);
-      }
-
+      const res = await fetch("/api/admin/cursos", { cache: "no-store" });
       const json = await res.json();
-      if (!json.ok) {
-        throw new Error(json.error || "Error desconocido en cursos");
+
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || "Error al cargar los datos del servidor.");
       }
 
-      setCursos(Array.isArray(json?.cursos) ? json.cursos : []);
-      setAlumnos(Array.isArray(json?.alumnos) ? json.alumnos : []);
-
-      const controllerPend = new AbortController();
-      const pendTimeout = setTimeout(() => controllerPend.abort(), 15000);
-      const resPend = await fetch(`/api/admin/inscripciones?t=${Date.now()}`, { cache: "no-store", signal: controllerPend.signal });
-      clearTimeout(pendTimeout);
-
-      if (!resPend.ok) {
-        const errText = await resPend.text().catch(() => "Error desconocido");
-        console.error("Error cargando pendientes:", resPend.status, errText);
-        setLoadError(`Error al cargar pendientes: ${resPend.status} - ${errText}`);
-        setPendientes([]);
-        // No retornamos aquí para que al menos se vean los cursos si cargaron bien
-      } else {
-        const jsonPend = await resPend.json().catch(() => null as any);
-        if (jsonPend) setDebugInfo(jsonPend.debug);
-        
-        if (jsonPend && jsonPend.ok === false) {
-            setLoadError(`Error API Pendientes: ${jsonPend.error || "Desconocido"}`);
-            setPendientes([]);
-        } else {
-            setPendientes(Array.isArray(jsonPend?.pendientes) ? jsonPend.pendientes : []);
-        }
-      }
-    } catch (error: any) {
-      setLoadError(`Error al cargar datos: ${error?.message || "Error desconocido"}`);
+      setCursos(json.cursos || []);
+      setPendientes(json.pendientes || []);
+    } catch (e: any) {
+      setError(e.message);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadCursos();
-  }, [supabase]);
+    loadData();
+  }, []);
 
-  const forceReload = async () => {
-    setLoading(true);
+  // --- CRUD de Cursos ---
+  const handleSave = async (formData: Omit<Curso, 'alumnos_count'>) => {
+    const isEditing = !!formData.id;
+    const method = isEditing ? "PUT" : "POST";
+    
     try {
-      const res = await fetch(`/api/admin/inscripciones?t=${Date.now()}`, { cache: "no-store" });
-      const text = await res.text();
-      let json;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        alert("Respuesta no válida del servidor: " + text.substring(0, 200));
-        return;
-      }
+      const res = await fetch("/api/admin/cursos", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      const json = await res.json();
 
-      alert(`Estado: ${res.status}\nDatos: ${JSON.stringify(json, null, 2)}`);
+      if (!res.ok || !json.ok) throw new Error(json.error);
 
-      if (json && json.pendientes) {
-        setPendientes(json.pendientes);
-        setDebugInfo(json.debug);
-      }
+      await loadData(); // Recargar todo para reflejar el cambio
+      setShowNew(false);
+      setEditingCurso(null);
     } catch (e: any) {
-      alert("Error de red: " + (e?.message || "Error"));
-    } finally {
-      setLoading(false);
+      alert(`Error al guardar: ${e.message}`);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="p-4 md:p-8">
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-50">
-              <Database className="w-5 h-5 mr-2 inline text-blue-400" />
-              Gestión de Cursos
-            </h1>
-            <p className="mt-1 text-sm text-slate-400">
-              Administración completa de cursos, categorías y matrículas
-            </p>
-          </div>
-          <div className="flex items-center gap-4 text-sm text-slate-300">
-            <User className="w-5 h-5" />
-            Cargando...
-          </div>
-        </header>
+  const handleDelete = async (id: string) => {
+    if (!confirm("¿Está seguro de eliminar este curso? Esta acción es irreversible y borrará los alumnos inscritos y material relacionado.")) return;
+    
+    try {
+      const res = await fetch(`/api/admin/cursos?id=${id}`, { method: "DELETE" });
+      const json = await res.json();
 
-        <div className="flex items-center justify-center py-12">
-          <div className="flex items-center gap-3 text-slate-400">
-            <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-            Cargando cursos...
-          </div>
-        </div>
-      </div>
-    );
+      if (!res.ok || !json.ok) throw new Error(json.error);
+
+      await loadData(); // Recargar
+    } catch (e: any) {
+      alert(`Error al eliminar: ${e.message}`);
+    }
+  };
+  
+  // --- Gestión de Pendientes ---
+  const handlePendiente = async (user_id: string, curso_id: string, action: 'aprobar' | 'rechazar') => {
+    try {
+        const res = await fetch("/api/admin/inscripciones", {
+            method: action === 'aprobar' ? 'POST' : 'DELETE',
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id, curso_id }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error);
+        await loadData(); // Recargar para actualizar la lista de pendientes y contadores
+    } catch (e: any) {
+        alert(`Error al ${action} la inscripción: ${e.message}`);
+    }
+  };
+
+  // --- Renderizado ---
+
+  const filteredCursos = useMemo(() => 
+    cursos.filter(c => 
+      c.titulo.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      c.descripcion.toLowerCase().includes(searchTerm.toLowerCase())
+    ), 
+    [cursos, searchTerm]
+  );
+
+  if (loading) {
+    return <div className="p-8 text-center text-slate-400">Cargando gestión de cursos...</div>;
   }
 
-  if (loadError) {
-    return (
-      <div className="p-4 md:p-8">
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-50">
-              <Database className="w-5 h-5 mr-2 inline text-blue-400" />
-              Gestión de Cursos
-            </h1>
-            <p className="mt-1 text-sm text-slate-400">
-              Administración completa de cursos, categorías y matrículas
-            </p>
-          </div>
-          <div className="flex items-center gap-4 text-sm text-slate-300">
-            <User className="w-5 h-5" />
-            {user?.email || "Administrador"}
-          </div>
-        </header>
+  if (error) {
+    return <div className="p-8 text-center text-red-400">Error: {error} <button onClick={loadData} className="text-blue-400">Reintentar</button></div>;
+  }
 
-        <div className="rounded-2xl border border-red-400/20 bg-red-500/10 p-6 text-red-200">
-          <div className="flex items-center gap-3 mb-2">
-            <AlertTriangle className="w-5 h-5" />
-            <h3 className="font-semibold">Error al cargar los cursos</h3>
-          </div>
-          <p className="text-sm mb-4">{loadError}</p>
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
-            >
-              Recargar página
-            </button>
-            <button
-              onClick={forceReload}
-              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium"
-            >
-              Debug
-            </button>
-            <button
-              onClick={() => setShowDebug(!showDebug)}
-              className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg text-sm font-medium"
-            >
-              {showDebug ? "Ocultar" : "Mostrar"} debug
-            </button>
-          </div>
-          {showDebug && debugInfo && (
-            <div className="mt-4 p-3 bg-black/20 rounded border border-white/10 text-xs font-mono text-slate-300">
-              <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
-            </div>
+  return (
+    <div className="p-4 md:p-8">
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-50 flex items-center gap-2">
+            <Database className="w-5 h-5 text-blue-400" />
+            Gestión de Cursos
+          </h1>
+          <p className="mt-1 text-sm text-slate-400">Administración de cursos, categorías y matrículas.</p>
+        </div>
+        <button onClick={() => { setEditingCurso(null); setShowNew(true); }} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium flex items-center gap-2">
+          <Plus className="w-4 h-4" />
+          Nuevo Curso
+        </button>
+      </header>
+
+      {showNew && <CursoForm curso={editingCurso} onSave={handleSave} onCancel={() => { setShowNew(false); setEditingCurso(null); }} />}
+
+      {/* Buscador */}
+      <div className="mb-6">
+        <input
+          type="text"
+          placeholder="Buscar por título o descripción..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full pl-4 pr-4 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:border-blue-500"
+        />
+      </div>
+
+      {/* Tabla de Cursos */}
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+        <table className="w-full text-left">
+          <thead>
+            <tr>
+              <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Curso</th>
+              <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Estado</th>
+              <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase text-center">Alumnos</th>
+              <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/10">
+            {filteredCursos.map(curso => (
+              <tr key={curso.id}>
+                <td className="px-4 py-3">
+                  <Link href={`/admin/detalle-curso?id=${curso.id}`} className="group">
+                    <div className="font-medium text-slate-50 group-hover:text-blue-400">{curso.titulo}</div>
+                    <div className="text-xs text-slate-400">{curso.categoria} / {curso.nivel}</div>
+                  </Link>
+                </td>
+                <td className="px-4 py-3"><span className={`px-2 py-1 text-xs rounded-full ${curso.estado === 'activo' ? 'bg-green-600' : 'bg-yellow-600'}`}>{curso.estado}</span></td>
+                <td className="px-4 py-3 text-center font-medium">{curso.alumnos_count}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => { setEditingCurso(curso); setShowNew(true); }} className="p-2 hover:bg-white/10 rounded-lg"><Edit className="w-4 h-4" /></button>
+                    <button onClick={() => handleDelete(curso.id)} className="p-2 hover:bg-white/10 rounded-lg"><Trash2 className="w-4 h-4 text-red-400" /></button>
+                    <Link href={`/admin/detalle-curso?id=${curso.id}`} className="p-2 hover:bg-white/10 rounded-lg"><ExternalLink className="w-4 h-4" /></Link>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filteredCursos.length === 0 && <p className="text-center py-8 text-slate-400">No se encontraron cursos.</p>}
+      </div>
+
+      {/* Solicitudes Pendientes */}
+      <div className="mt-10">
+        <h2 className="text-lg font-semibold text-slate-50 mb-4 flex items-center gap-2">
+          <Users className="w-5 h-5 text-blue-400" />
+          Solicitudes de Ingreso Pendientes
+        </h2>
+        <div className="rounded-xl border border-white/10 bg-white/5 divide-y divide-white/10">
+          {pendientes.length === 0 ? (
+            <p className="p-6 text-sm text-slate-400">No hay solicitudes pendientes.</p>
+          ) : (
+            pendientes.map(p => (
+              <div key={`${p.user_id}:${p.curso_id}`} className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="font-medium">{p.nombre} {p.apellido}</p>
+                  <p className="text-xs text-slate-400">{p.user_email}</p>
+                  <p className="text-sm">quiere inscribirse a <span className="font-semibold">{p.curso_titulo}</span></p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => handlePendiente(p.user_id, p.curso_id, 'aprobar')} className="px-3 py-1 rounded bg-green-600 hover:bg-green-700 text-white text-xs">Aprobar</button>
+                  <button onClick={() => handlePendiente(p.user_id, p.curso_id, 'rechazar')} className="px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs">Rechazar</button>
+                </div>
+              </div>
+            ))
           )}
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  const saveNewCourse = async () => {
-     try {
-       setSaving(true);
-       const method = editingId ? "PUT" : "POST";
-        // Parse precio desde texto permitiendo puntos y comas
-        const raw = newPrecioText.trim();
-        const normalized = raw
-           .replace(/\./g, "") // miles
-           .replace(/,/g, "."); // decimales estilo es-AR
-        const precioNum = Number(normalized);
-        const precioFinal = Number.isFinite(precioNum) ? Math.max(0, precioNum) : 0;
-        const body: any = {
-           titulo: newTitulo,
-           descripcion: newDescripcion,
-           duracion: newDuracion,
-           modalidad: newModalidad,
-           categoria: newCategoria,
-           nivel: newNivel,
-            precio: precioFinal,
-           estado: newEstado,
-           imagen: newImagen,
-       };
-       if (editingId) body.id = editingId;
+// Componente de Formulario para Crear/Editar Curso
+function CursoForm({ curso, onSave, onCancel }: { curso: Curso | null; onSave: (data: any) => void; onCancel: () => void; }) {
+  const [formData, setFormData] = useState({
+    id: curso?.id || '',
+    titulo: curso?.titulo || '',
+    descripcion: curso?.descripcion || '',
+    duracion: curso?.duracion || '',
+    modalidad: curso?.modalidad || 'virtual',
+    categoria: curso?.categoria || '',
+    nivel: curso?.nivel || 'inicial',
+    precio: curso?.precio || 0,
+    estado: curso?.estado || 'en_desarrollo',
+    imagen: curso?.imagen || null
+  });
 
-       const res = await fetch("/api/admin/cursos", {
-         method,
-         headers: { "Content-Type": "application/json" },
-         body: JSON.stringify(body),
-       });
-       const json = await res.json().catch(() => null as any);
-       if (!res.ok || !json?.ok) {
-         alert(json?.error || "No se pudo guardar el curso");
-         return;
-       }
-       setShowNew(false);
-       setEditingId(null);
-       setNewTitulo("");
-       setNewDescripcion("");
-       setNewDuracion("");
-       setNewCategoria("");
-       setNewPrecio(0);
-       setNewPrecioText("0");
-       setNewImagen("");
-       // Refresh
-       await loadCursos();
-    } catch (e) {
-      alert("Error al guardar curso");
-    } finally {
-      setSaving(false);
-      setLoading(false);
-    }
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-   const startEdit = (curso: CursoRow) => {
-      setEditingId(curso.id);
-      setNewTitulo(curso.titulo);
-      setNewDescripcion(curso.descripcion);
-      setNewDuracion(curso.duracion);
-      setNewModalidad(curso.modalidad as any);
-      setNewCategoria(curso.categoria);
-      setNewNivel(curso.nivel as any);
-      setNewPrecio(curso.precio);
-      setNewPrecioText(curso.precio != null ? curso.precio.toLocaleString('es-AR') : "0");
-      setNewEstado(curso.estado as any);
-      setNewImagen(curso.imagen || "");
-      setShowNew(true);
-   };
-
-   const deleteCourse = async (id: string) => {
-    if (!confirm("¿Eliminar este curso?")) return;
-    try {
-      const res = await fetch(`/api/admin/cursos?id=${id}&t=${Date.now()}`, { 
-        method: "DELETE",
-        cache: "no-store"
-      });
-      if (res.ok) {
-        setCursos(prev => prev.filter(c => c.id !== id));
-        // Recargar desde el servidor para asegurar persistencia
-        await loadCursos();
-      } else {
-        const json = await res.json().catch(() => null);
-        alert(`Error al eliminar: ${json?.error || "Error desconocido"}`);
-        // Recargar por si el estado local estaba desincronizado
-        await loadCursos();
-      }
-    } catch (e: any) {
-      alert("Error de red: " + (e?.message || ""));
-    }
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(formData);
   };
 
-   const approvePending = async (user_id: string, curso_id: string) => {
-     try {
-       const res = await fetch("/api/admin/inscripciones", {
-         method: "POST",
-         headers: { "Content-Type": "application/json" },
-         body: JSON.stringify({ user_id, curso_id }),
-       });
-       const json = await res.json().catch(() => null as any);
-       if (!res.ok || !json?.ok) {
-         alert(json?.error || "No se pudo aprobar");
-         return;
-       }
-       setPendientes(prev => prev.filter(p => !(p.user_id === user_id && p.curso_id === curso_id)));
-     } catch (e) {
-       alert("Error al aprobar");
-     }
-   };
- 
-   const rejectPending = async (user_id: string, curso_id: string) => {
-     try {
-       const res = await fetch("/api/admin/inscripciones", {
-         method: "DELETE",
-         headers: { "Content-Type": "application/json" },
-         body: JSON.stringify({ user_id, curso_id }),
-       });
-       const json = await res.json().catch(() => null as any);
-       if (!res.ok || !json?.ok) {
-         alert(json?.error || "No se pudo rechazar");
-         return;
-       }
-       setPendientes(prev => prev.filter(p => !(p.user_id === user_id && p.curso_id === curso_id)));
-     } catch (e) {
-       alert("Error al rechazar");
-     }
-   };
- 
-   const filteredCursos = cursos.filter(curso => {
-     const searchMatch = !searchTerm || 
-       curso.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-       curso.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
-       curso.categoria.toLowerCase().includes(searchTerm.toLowerCase());
-     
-     const estadoMatch = !filterEstado || curso.estado === filterEstado;
-     const categoriaMatch = !filterCategoria || curso.categoria === filterCategoria;
-     const nivelMatch = !filterNivel || curso.nivel === filterNivel;
-     
-     return searchMatch && estadoMatch && categoriaMatch && nivelMatch;
-   });
- 
-   const totalPages = Math.ceil(filteredCursos.length / itemsPerPage);
-   const paginatedCursos = filteredCursos.slice(
-     (currentPage - 1) * itemsPerPage,
-     currentPage * itemsPerPage
-   );
- 
-   const categorias = Array.from(new Set(cursos.map(c => c.categoria)));
-   const niveles = Array.from(new Set(cursos.map(c => c.nivel)));
- 
-   return (
-     <div className="p-4 md:p-8">
-       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-         <div>
-           <h1 className="text-xl font-semibold text-slate-50">
-             <Database className="w-5 h-5 mr-2 inline text-blue-400" />
-             Gestión de Cursos
-           </h1>
-           <p className="mt-1 text-sm text-slate-400">
-             Administración completa de cursos, categorías y matrículas
-           </p>
-         </div>
-         <div className="flex items-center gap-4 text-sm text-slate-300">
-           <User className="w-5 h-5" />
-           {user?.email || "Administrador"}
-         </div>
-         <div className="flex gap-2">
-           <button
-             onClick={forceReload}
-             className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-           >
-             <Database className="w-4 h-4" />
-             Debug
-           </button>
-           <button
-             onClick={() => setShowNew(true)}
-             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-           >
-             <Plus className="w-4 h-4" />
-             Nuevo Curso
-           </button>
-         </div>
-       </header>
-
-       <div className="rounded-2xl border border-white/10 bg-white/5 p-4 mb-6">
-             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-               <div className="md:col-span-3">
-                 <div className="relative">
-                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
-                   <input
-                     type="text"
-                     placeholder="Buscar por título, descripción o categoría..."
-                     value={searchTerm}
-                     onChange={(e) => setSearchTerm(e.target.value)}
-                     className="w-full pl-10 pr-4 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:border-blue-500"
-                   />
-                 </div>
-               </div>
- 
-               <div>
-                 <select
-                   value={filterEstado}
-                   onChange={(e) => setFilterEstado(e.target.value)}
-                   className="w-full px-4 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
-                 >
-                   <option value="">Todos los estados</option>
-                   <option value="activo">Activos</option>
-                   <option value="inactivo">Inactivos</option>
-                   <option value="en_desarrollo">En desarrollo</option>
-                   <option value="suspendido">Suspendidos</option>
-                 </select>
-               </div>
- 
-               <div>
-                 <select
-                   value={filterCategoria}
-                   onChange={(e) => setFilterCategoria(e.target.value)}
-                   className="w-full px-4 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
-                 >
-                   <option value="">Todas las categorías</option>
-                   {categorias.map(cat => (
-                     <option key={cat} value={cat}>{cat}</option>
-                   ))}
-                 </select>
-               </div>
- 
-               <div>
-                 <select
-                   value={filterNivel}
-                   onChange={(e) => setFilterNivel(e.target.value)}
-                   className="w-full px-4 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500"
-                 >
-                   <option value="">Todos los niveles</option>
-                   {niveles.map(nivel => (
-                     <option key={nivel} value={nivel}>{nivel}</option>
-                   ))}
-                 </select>
-               </div>
-             </div>
-           </div>
- 
-           <div className="flex items-center justify-between mb-6 p-4 bg-white/5 rounded-2xl border border-white/10">
-             <div className="text-sm font-medium text-slate-50">
-               {filteredCursos.length} cursos encontrados
-             </div>
-             <div className="flex items-center gap-2">
-               <button
-                onClick={() => setShowNew(true)}
-                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
-                 <Plus className="w-4 h-4" />
-                 Nuevo Curso
-               </button>
-               <button
-                 onClick={() => {
-                   console.log("Exportando cursos...");
-                 }}
-                 className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors">
-                 <Download className="w-4 h-4" />
-                 Exportar
-               </button>
-             </div>
-           </div>
- 
-           <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-             {showNew && (
-               <div className="mb-6 p-4 bg-white/5 rounded-xl border border-white/10">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div>
-                     <label className="text-xs text-slate-400">Título</label>
-                     <input value={newTitulo} onChange={(e) => setNewTitulo(e.target.value)} className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100" />
-                   </div>
-                   <div>
-                     <label className="text-xs text-slate-400">Categoría</label>
-                     <input value={newCategoria} onChange={(e) => setNewCategoria(e.target.value)} className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100" />
-                   </div>
-                   <div className="md:col-span-2">
-                     <label className="text-xs text-slate-400">Descripción</label>
-                     <textarea value={newDescripcion} onChange={(e) => setNewDescripcion(e.target.value)} className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100" />
-                   </div>
-                   <div>
-                     <label className="text-xs text-slate-400">Duración</label>
-                     <input value={newDuracion} onChange={(e) => setNewDuracion(e.target.value)} className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100" />
-                   </div>
-                   <div>
-                     <label className="text-xs text-slate-400">Modalidad</label>
-                     <select value={newModalidad} onChange={(e) => setNewModalidad(e.target.value as any)} className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100">
-                       <option value="virtual">Virtual</option>
-                       <option value="presencial">Presencial</option>
-                       <option value="semipresencial">Semipresencial</option>
-                       <option value="a distancia">A distancia</option>
-                     </select>
-                   </div>
-                   <div>
-                     <label className="text-xs text-slate-400">Nivel</label>
-                     <select value={newNivel} onChange={(e) => setNewNivel(e.target.value as any)} className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100">
-                       <option value="inicial">Inicial</option>
-                       <option value="intermedio">Intermedio</option>
-                       <option value="avanzado">Avanzado</option>
-                       <option value="especializacion">Especialización</option>
-                     </select>
-                   </div>
-                  <div>
-                    <label className="text-xs text-slate-400">Precio (ARS)</label>
-                    <input
-                      inputMode="decimal"
-                      value={newPrecioText}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        // Permitir dígitos, puntos y comas
-                        if (/^[0-9.,]*$/.test(v)) {
-                          setNewPrecioText(v);
-                        }
-                      }}
-                      onBlur={() => {
-                        // Formatear en es-AR al salir
-                        const normalized = newPrecioText.replace(/\./g, "").replace(/,/g, ".");
-                        const num = Number(normalized);
-                        if (Number.isFinite(num)) {
-                          setNewPrecio(num);
-                          setNewPrecioText(num.toLocaleString('es-AR'));
-                        } else {
-                          setNewPrecio(0);
-                          setNewPrecioText("0");
-                        }
-                      }}
-                      placeholder="Ej: 120.000"
-                      className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100"
-                    />
-                  </div>
-                   <div>
-                     <label className="text-xs text-slate-400">Estado</label>
-                     <select value={newEstado} onChange={(e) => setNewEstado(e.target.value as any)} className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg text-slate-100">
-                       <option value="en_desarrollo">En desarrollo</option>
-                       <option value="activo">Activo</option>
-                       <option value="inactivo">Inactivo</option>
-                       <option value="suspendido">Suspendido</option>
-                     </select>
-                   </div>
-                   <div className="md:col-span-2">
-                    <label className="text-xs text-slate-400">Imagen de portada</label>
-                    <div className="flex items-center gap-4 mt-1">
-                      {newImagen && (
-                        <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-white/10">
-                          <img src={newImagen} alt="Portada" className="w-full h-full object-cover" />
-                          <button 
-                            onClick={() => setNewImagen("")}
-                            className="absolute top-0 right-0 p-1 bg-black/50 hover:bg-black/70 text-white rounded-bl-lg"
-                          >
-                            <XCircle className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-                      <div className="flex-1">
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          onChange={handleImageUpload}
-                          disabled={uploadingImage}
-                          className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
-                        />
-                        {uploadingImage && <span className="text-xs text-blue-400 ml-2">Subiendo...</span>}
-                      </div>
-                    </div>
-                  </div>
-                 </div>
-                 <div className="mt-4 flex items-center gap-2">
-                   <button onClick={saveNewCourse} disabled={saving} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50">
-                     Guardar curso
-                   </button>
-                   <button onClick={() => setShowNew(false)} className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-100 text-sm">
-                     Cancelar
-                   </button>
-                 </div>
-              </div>
-            )}
-            <table className="w-full">
-               <thead className="text-left">
-                 <tr>
-                   <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Curso</th>
-                   <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Descripción</th>
-                   <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Duración</th>
-                   <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Modalidad</th>
-                   <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Precio</th>
-                   <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Estado</th>
-                   <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Alumnos</th>
-                   <th className="px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Acciones</th>
-                 </tr>
-               </thead>
-               <tbody className="bg-white/5">
-                 {paginatedCursos.length === 0 ? (
-                   <tr>
-                     <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
-                       <AlertTriangle className="w-8 h-8 mx-auto mb-2" />
-                       <p className="text-sm">No se encontraron cursos con los criterios actuales</p>
-                     </td>
-                   </tr>
-                 ) : (
-                   paginatedCursos.map((curso) => (
-                     <tr key={curso.id} className="hover:bg-white/10">
-                       <td className="px-4 py-3">
-                          <Link href={`/admin/detalle-curso?id=${curso.id}`} className="block group" onClick={() => console.log("Navigating to:", curso.id)}>
-                          <div className="text-sm font-medium text-slate-50 group-hover:text-blue-400 transition-colors flex items-center gap-2">
-                             {curso.titulo}
-                             <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </div>
-                          <div className="text-xs text-slate-400">ID: {curso.id}</div>
-                        </Link>
-                      </td>
-                       <td className="px-4 py-3">
-                         <div className="text-sm text-slate-400 line-clamp-2">{curso.descripcion || "Sin descripción"}</div>
-                       </td>
-                       <td className="px-4 py-3 text-center">
-                         <div className="text-sm text-slate-50">{curso.duracion}</div>
-                       </td>
-                       <td className="px-4 py-3 text-center">
-                         <div className="text-sm text-slate-50 capitalize">{curso.modalidad}</div>
-                       </td>
-                       <td className="px-4 py-3 text-center">
-                         <div className="text-sm font-medium text-emerald-400">$ {curso.precio.toLocaleString('es-AR')}</div>
-                       </td>
-                       <td className="px-4 py-3 text-center">
-                         <span className={`px-2 py-1 rounded-full text-xs ${
-                           curso.estado === "activo" ? "bg-green-600 text-green-100" :
-                           curso.estado === "inactivo" ? "bg-red-600 text-red-100" :
-                           curso.estado === "en_desarrollo" ? "bg-yellow-600 text-yellow-100" :
-                           "bg-gray-600 text-gray-100"
-                         }`}>
-                           {curso.estado.replace("_", " ")}
-                         </span>
-                       </td>
-                       <td className="px-4 py-3 text-center">
-                         <div className="text-sm text-slate-50 font-medium">
-                           {alumnos.filter(al => al.curso_id === curso.id).length}</div>
-                       </td>
-                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <Link
-                            href={`/admin/detalle-curso?id=${curso.id}`}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition-colors"
-                          >
-                              <Settings className="w-3 h-3" />
-                              Gestionar
-                          </Link>
-                          <button
-                           onClick={() => startEdit(curso)}
-                           className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                           title="Editar información básica"
-                          >
-                             <Edit className="w-4 h-4" />
-                           </button>
-                         <button
-                           onClick={() => {
-                             if (confirm("¿Está seguro que desea cambiar el estado de este curso?")) {
-                               console.log("Cambiar estado:", curso.id);
-                             }
-                           }}
-                           className="p-1.5 text-slate-400 hover:text-yellow-400 hover:bg-yellow-400/10 rounded-lg transition-colors"
-                           title="Cambiar estado"
-                         >
-                             <Clock className="w-4 h-4" />
-                           </button>
-                         <button
-                           onClick={() => deleteCourse(curso.id)}
-                           className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                           title="Eliminar curso"
-                         >
-                             <Trash2 className="w-4 h-4" />
-                           </button>
-                        </div>
-                      </td>
-                     </tr>
-                   ))
-                 )}
-               </tbody>
-             </table>
- 
-             <div className="mt-10">
-               <h2 className="text-lg font-semibold text-slate-50 mb-4">
-                 <Users className="w-5 h-5 mr-2 inline text-blue-400" />
-                 Solicitudes de ingreso pendientes
-                 <button 
-                   onClick={forceReload}
-                   className="ml-4 text-xs bg-white/10 hover:bg-white/20 px-2 py-1 rounded text-slate-300"
-                 >
-                   🔍 Diagnóstico
-                 </button>
-               </h2>
-              {loadError && (
-                  <div className="mb-4 p-4 rounded-lg bg-red-900/50 border border-red-500/50 text-red-200 text-sm">
-                    {loadError}
-                  </div>
-               )}
-               {debugInfo && (
-                  <div className="mb-4 p-4 rounded-lg bg-blue-900/30 border border-blue-500/30 text-blue-200 text-xs font-mono whitespace-pre-wrap">
-                    DEBUG INFO (Solo Admin):<br/>
-                    - Has Service Key: {debugInfo.hasServiceKey ? "SÍ" : "NO (Crítico)"}<br/>
-                    - Intereses Count: {debugInfo.interesesCount}<br/>
-                    - Intereses Error: {debugInfo.interesesError || "Ninguno"}<br/>
-                    - CursosAlumnos Count: {debugInfo.cursosAlumnosCount}<br/>
-                    - CursosAlumnos Error: {debugInfo.cursosAlumnosError || "Ninguno"}<br/>
-                    {(!debugInfo.hasServiceKey) && (
-                      <span className="text-red-300 font-bold block mt-2">
-                        ⚠️ ATENCIÓN: Falta configurar SUPABASE_SERVICE_ROLE_KEY en Vercel.
-                        Sin esto, el admin no puede ver las solicitudes de inscripción.
-                      </span>
-                    )}
-                  </div>
-               )}
-               <div className="rounded-xl border border-white/10 bg-white/5">
-                 {pendientes.length === 0 ? (
-                   <div className="p-6 text-sm text-slate-400">No hay solicitudes pendientes.</div>
-                 ) : (
-                   <div className="divide-y divide-white/10">
-                     {[...pendientes].sort((a, b) => {
-                       const ta = a?.created_at ? new Date(a.created_at).getTime() : 0;
-                       const tb = b?.created_at ? new Date(b.created_at).getTime() : 0;
-                       return tb - ta;
-                     }).map((p) => (
-                       <div key={`${p.user_id}:${p.curso_id}`} className="p-4 flex items-center justify-between">
-                         <div className="text-sm text-slate-200">
-                           <div>
-                             Alumno: <span className="font-medium">
-                               {p.nombre || ""} {p.apellido || ""}
-                             </span>
-                           </div>
-                           <div className="text-xs">
-                             Email: <span className="font-mono">{p.user_email || p.user_id}</span>
-                           </div>
-                           <div>Curso: <span className="font-medium">{p.curso_titulo || p.curso_id}</span></div>
-                         </div>
-                         <div className="flex items-center gap-2">
-                           <button onClick={() => approvePending(p.user_id, p.curso_id)} className="px-3 py-1 rounded bg-green-600 hover:bg-green-700 text-white text-xs">
-                             Aprobar
-                           </button>
-                           <button onClick={() => rejectPending(p.user_id, p.curso_id)} className="px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs">
-                             Rechazar
-                           </button>
-                         </div>
-                       </div>
-                     ))}
-                   </div>
-                 )}
-               </div>
-             </div>
- 
-             {filteredCursos.length > itemsPerPage && (
-               <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/10">
-                 <div className="text-sm text-slate-400">
-                   Mostrando {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredCursos.length)} de {filteredCursos.length} cursos
-                 </div>
-                 <div className="flex items-center gap-2">
-                   <button
-                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                     disabled={currentPage === 1}
-                     className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-slate-100 text-xs disabled:opacity-50">
-                     Anterior
-                   </button>
-                   <div className="flex items-center gap-1">
-                     {[...Array(totalPages)].map((_, idx) => (
-                       <button
-                         key={idx}
-                         onClick={() => setCurrentPage(idx + 1)}
-                         className={`px-3 py-1 rounded text-xs ${
-                           currentPage === idx + 1
-                             ? "bg-blue-600 text-white"
-                             : "bg-white/10 text-slate-100 hover:bg-white/20"
-                         }`}
-                       >
-                         {idx + 1}
-                       </button>
-                     ))}
-                   </div>
-                   <button
-                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                     disabled={currentPage === totalPages}
-                     className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-slate-100 text-xs disabled:opacity-50">
-                     Siguiente
-                   </button>
-                 </div>
-               </div>
-             )}
-      </div>
+  return (
+    <div className="mb-6 p-4 bg-white/5 rounded-xl border border-white/10">
+      <h3 className="text-lg font-semibold mb-4">{curso ? 'Editar Curso' : 'Nuevo Curso'}</h3>
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <input name="titulo" value={formData.titulo} onChange={handleChange} placeholder="Título del curso" className="md:col-span-2 w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg" required />
+        <textarea name="descripcion" value={formData.descripcion} onChange={handleChange} placeholder="Descripción" className="md:col-span-2 w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg" />
+        <input name="duracion" value={formData.duracion} onChange={handleChange} placeholder="Duración (ej: 3 meses)" className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg" />
+        <input name="categoria" value={formData.categoria} onChange={handleChange} placeholder="Categoría" className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg" />
+        <select name="modalidad" value={formData.modalidad} onChange={handleChange} className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg">
+            <option value="virtual">Virtual</option>
+            <option value="presencial">Presencial</option>
+        </select>
+        <select name="nivel" value={formData.nivel} onChange={handleChange} className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg">
+            <option value="inicial">Inicial</option>
+            <option value="intermedio">Intermedio</option>
+            <option value="avanzado">Avanzado</option>
+        </select>
+        <input name="precio" type="number" value={formData.precio} onChange={handleChange} placeholder="Precio" className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg" />
+        <select name="estado" value={formData.estado} onChange={handleChange} className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg">
+            <option value="en_desarrollo">En Desarrollo</option>
+            <option value="activo">Activo</option>
+            <option value="inactivo">Inactivo</option>
+        </select>
+        <div className="md:col-span-2 flex items-center gap-2">
+          <button type="submit" className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm">Guardar</button>
+          <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-100 text-sm">Cancelar</button>
+        </div>
+      </form>
     </div>
   );
 }
