@@ -42,8 +42,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { error } = await supabase.auth.signInWithOtp({
       email: e,
       options: {
-        // Corrected: Redirect back to the courses page as originally intended.
-        emailRedirectTo: `${window.location.origin}/cursos`,
+        // CORREGIDO: Apuntar a la ruta de callback para que el servidor decida el destino.
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
 
@@ -61,8 +61,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password,
       options: {
         data: userData,
-        // Corrected: Redirect back to the courses page as originally intended.
-        emailRedirectTo: `${window.location.origin}/cursos`,
+        // CORREGIDO: Apuntar a la ruta de callback para que el servidor decida el destino.
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
     if (error) throw error;
