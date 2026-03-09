@@ -1,47 +1,33 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from '@supabase/supabase-js';
+import { Database } from '@/lib/database.types';
 
-function getSupabaseAdminEnv() {
-  let url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  // Usamos un nombre de variable nuevo para romper cualquier cache de Vercel
-  const key_admin = process.env.SUPABASE_ADMIN_KEY;
-  const key_with_key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const key_without_key = process.env.SUPABASE_SERVICE_ROLE;
-  
-  let serviceKey = key_admin || key_with_key || key_without_key;
-  const source = key_admin ? "SUPABASE_ADMIN_KEY" : (key_with_key ? "SUPABASE_SERVICE_ROLE_KEY" : (key_without_key ? "SUPABASE_SERVICE_ROLE" : "NINGUNA"));
-  
-  if (!url) throw new Error("Supabase URL faltante");
-  if (!serviceKey) throw new Error(`Supabase Service Role Key faltante. Intentado buscar en: ${source}`);
+/**
+ * Este cliente está configurado para usar las credenciales de administrador (service_role).
+ * DEBE ser usado únicamente en el lado del servidor (Server Components, API Routes, Server Actions).
+ * NUNCA debe ser expuesto al cliente/navegador.
+ *
+ * Lanza un error si las variables de entorno necesarias no están definidas.
+ */
 
-  // Sanitize URL: remove whitespace, fix trailing garbage
-  url = url.replace(/\s/g, '').replace(/\/$/, '');
-  // Fix common typos or paste errors
-  if (url.endsWith('.con')) {
-    url = url.slice(0, -1); // .con -> .co
-  }
-  // If it ends with .co followed by garbage (like 'n')
-  const match = url.match(/^(https:\/\/.*\.supabase\.co)/);
-  if (match) {
-    url = match[1];
-  }
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+// Estandarizamos a una sola variable. La documentación debe reflejar esto.
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  // Limpiar absolutamente todo: espacios, nuevas líneas, comillas e interpolaciones fallidas
-  serviceKey = serviceKey.replace(/\s/g, '').replace(/^["']|["']$/g, '');
-
-  if (serviceKey.includes('${')) {
-    throw new Error(`Error de Configuración: La variable ${source} en Vercel tiene un valor de referencia no resuelto: "${serviceKey.substring(0, 20)}...". Por favor, edita esta variable en el panel de Vercel y asegúrate de pegar la clave literal (que empieza con eyJ) en lugar de una referencia.`);
-  }
-
-  if (!serviceKey.startsWith("eyJ")) {
-    console.error("CRITICAL: Supabase Service Role Key does not start with eyJ. Starts with:", serviceKey.substring(0, 10));
-    throw new Error(`Supabase Service Role Key con formato inválido (empieza con ${serviceKey.substring(0, 3)}...). Asegúrate de que no tenga comillas o espacios en Vercel.`);
-  }
-  return { url, key: serviceKey };
+if (!supabaseUrl) {
+  throw new Error('Supabase URL no encontrada. Asegúrate de que NEXT_PUBLIC_SUPABASE_URL esté definida en .env.local');
 }
 
-export function createSupabaseAdminClient() {
-  const { url, key } = getSupabaseAdminEnv();
-  return createClient(url, key, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+if (!supabaseServiceRoleKey) {
+  throw new Error('Supabase Service Role Key no encontrada. Asegúrate de que SUPABASE_SERVICE_ROLE_KEY esté definida en .env.local');
 }
+
+// Creamos un singleton para el cliente de admin.
+// Esto evita crear una nueva conexión en cada importación dentro del mismo ciclo de request.
+const adminClient = createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+  },
+});
+
+export const createSupabaseAdminClient = () => adminClient;
