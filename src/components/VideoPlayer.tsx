@@ -5,7 +5,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 // --- PARSERS DE TRANSCRIPCIÓN (SIN CAMBIOS) ---
 function parsearTiempoSrt(tiempo: string): number {
   if (!tiempo) return 0;
-  const tiempoLimpio = tiempo.replace(/[,.]\d+$/, '');
+  const tiempoLimpio = tiempo.replace(/[,.]\\d+$/, '');
   const partes = tiempoLimpio.split(':').map(part => parseInt(part, 10));
   if (partes.length === 3) {
     const [horas, minutos, segundos] = partes;
@@ -21,11 +21,11 @@ interface TranscripcionItem {
 
 function parsearSrt(srt: string): TranscripcionItem[] {
   if (!srt) return [];
-  const contenido = srt.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const bloques = contenido.split(/\n\s*\n/);
+  const contenido = srt.replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n');
+  const bloques = contenido.split(/\\n\\s*\\n/);
   const items: TranscripcionItem[] = [];
   for (const bloque of bloques) {
-    const lineas = bloque.trim().split('\n');
+    const lineas = bloque.trim().split('\\n');
     if (lineas.length >= 2) {
       const lineaTiempoIndex = lineas.findIndex(l => l.includes('-->'));
       if (lineaTiempoIndex !== -1) {
@@ -43,7 +43,7 @@ function parsearSrt(srt: string): TranscripcionItem[] {
 function parsearTexto(texto: string): TranscripcionItem[] {
   let oraciones = texto.split(/[.!?]+/).filter(s => s.trim().length > 0);
   if (oraciones.length === 0) {
-    oraciones = texto.split(/\n+/).filter(s => s.trim().length > 0);
+    oraciones = texto.split(/\\n+/).filter(s => s.trim().length > 0);
   }
   const duracionEstimada = 600;
   const tiempoPorOracion = oraciones.length > 0 ? duracionEstimada / oraciones.length : 0;
@@ -65,14 +65,14 @@ interface VideoPlayerProps {
   transcripcionSrt?: string;
 }
 
-export default function VideoPlayer({ 
-  videoUrl, 
-  videoUrlParte2, 
-  videoUrlParte3, 
+export default function VideoPlayer({
+  videoUrl,
+  videoUrlParte2,
+  videoUrlParte3,
   videoUrlParte4,
-  titulo, 
-  transcripcionTexto, 
-  transcripcionSrt 
+  titulo,
+  transcripcionTexto,
+  transcripcionSrt
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [tiempoActual, setTiempoActual] = useState(0);
@@ -94,12 +94,12 @@ export default function VideoPlayer({
     const onSourceOpen = async () => {
       console.log("MediaSource abierto, preparando buffer...");
       const sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
-      
+
       let partIndex = 0;
 
       const appendNextPart = async () => {
         if (partIndex >= videoParts.length) {
-          if (!mediaSource.ended) {
+          if (mediaSource.readyState === 'open') {
             console.log("Todas las partes añadidas, finalizando stream.");
             mediaSource.endOfStream();
           }
@@ -111,7 +111,7 @@ export default function VideoPlayer({
           const response = await fetch(videoParts[partIndex]);
           if (!response.ok) throw new Error(`Error al cargar la parte ${partIndex + 1}`);
           const arrayBuffer = await response.arrayBuffer();
-          
+
           sourceBuffer.appendBuffer(arrayBuffer);
           partIndex++;
         } catch (error) {
@@ -120,7 +120,7 @@ export default function VideoPlayer({
       };
 
       sourceBuffer.addEventListener('updateend', appendNextPart);
-      
+
       // Iniciar la carga de la primera parte
       appendNextPart();
     };
@@ -152,7 +152,7 @@ export default function VideoPlayer({
       video.removeEventListener('durationchange', actualizarDuracion);
     };
   }, []);
-  
+
   const transcripcionParseada = useMemo(() => {
     if (transcripcionSrt) return parsearSrt(transcripcionSrt);
     if (transcripcionTexto) return parsearTexto(transcripcionTexto);
@@ -176,10 +176,10 @@ export default function VideoPlayer({
     const seg = Math.floor(segundos % 60);
     return `${min}:${seg.toString().padStart(2, '0')}`;
   };
-  
+
   const transcripcionFiltrada = useMemo(() => {
       if (!busqueda) return transcripcionParseada;
-      return transcripcionParseada.filter(item => 
+      return transcripcionParseada.filter(item =>
         item.texto.toLowerCase().includes(busqueda.toLowerCase())
       );
   }, [busqueda, transcripcionParseada]);
@@ -220,7 +220,7 @@ export default function VideoPlayer({
                   >
                       Tu navegador no soporta el elemento de video.
                   </video>
-                  
+
                   {isMultipart && (
                   <div className="absolute top-2 right-2 bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs font-mono">
                       STREAMING ({videoParts.length} partes)
