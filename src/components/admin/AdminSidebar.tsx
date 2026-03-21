@@ -64,6 +64,12 @@ const menuItems = [
     description: "Finanzas"
   },
   {
+    name: "Usuarios",
+    href: "/admin/usuarios",
+    icon: Users,
+    description: "Cuentas registradas"
+  },
+  {
     name: "Ajustes",
     href: "/admin/ajustes",
     icon: Settings,

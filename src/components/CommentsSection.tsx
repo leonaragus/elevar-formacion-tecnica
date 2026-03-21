@@ -7,6 +7,8 @@ type Comment = {
   clase_id: string;
   author_id?: string | null;
   author_email?: string | null;
+  author_nombre?: string | null;
+  author_apellido?: string | null;
   texto: string;
   created_at: string;
 };
@@ -25,6 +27,7 @@ export default function CommentsSection({ claseId }: { claseId: string }) {
         cache: "no-store",
       });
       const json = await res.json();
+      console.log("DEBUG: Comentarios cargados:", json.items);
       if (json?.ok) {
         setComments(Array.isArray(json.items) ? json.items : []);
       } else {
@@ -101,10 +104,10 @@ export default function CommentsSection({ claseId }: { claseId: string }) {
             <li key={c.id} className="border border-gray-200 rounded-md p-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-900">
-                  {c.author_email
-                    ? c.author_email
-                    : c.author_id
-                    ? "Usuario"
+                  {c.author_nombre || c.author_apellido
+                    ? `${c.author_nombre || ""} ${c.author_apellido || ""}`.trim()
+                    : c.author_email 
+                    ? c.author_email.split('@')[0]
                     : "Anónimo"}
                 </span>
                 <span className="text-xs text-gray-500">

@@ -9,6 +9,8 @@ type Item = {
   clase_titulo?: string; // Lo hacemos opcional porque el input no lo necesita
   author_email?: string | null;
   author_id?: string | null;
+  author_nombre?: string | null;
+  author_apellido?: string | null;
   texto: string;
   created_at: string;
   isOptimistic?: boolean;
@@ -27,7 +29,12 @@ function Avatar({ text }: { text: string }) {
 }
 
 function CommentItem({ item }: { item: Item }) {
-  const authorName = item.author_email ? item.author_email.split('@')[0] : "Anónimo";
+  let authorName = "Anónimo";
+  if (item.author_nombre || item.author_apellido) {
+    authorName = `${item.author_nombre || ''} ${item.author_apellido || ''}`.trim();
+  } else if (item.author_email) {
+    authorName = item.author_email.split('@')[0];
+  }
   
   return (
     <li className={`flex items-start gap-3 p-4 rounded-lg bg-gray-900/50 border border-gray-700/80 ${item.isOptimistic ? 'opacity-60' : ''}`}>
